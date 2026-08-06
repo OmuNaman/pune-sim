@@ -60,16 +60,18 @@ class Injection:
 
 
 def stub_institution_reactions(
-    inj: Injection, t_abs: int, block: Block, people: dict[str, Person]
+    inj: Injection, t_abs: int, block: Block, people: dict[str, Person], caused_by: int | None = None
 ) -> list[TimedEvent]:
     """Hand-rule subscribers (07-interface red-team fixture): scripted
-    ambulance/hospital/school reactions until INSTITUTIONS exists (V2)."""
+    ambulance/hospital/school reactions until INSTITUTIONS exists (V2).
+    Every reaction carries `caused_by` — the consequence cone's lineage."""
     out: list[TimedEvent] = []
     if not inj.type.startswith("hazard."):
         return out
     if inj.place:
         out.append(
-            TimedEvent(t_abs + 8 * 60, "ambulance.dispatched", {"place": inj.place, "for": list(inj.participants)})
+            TimedEvent(t_abs + 8 * 60, "ambulance.dispatched",
+                       {"place": inj.place, "for": list(inj.participants)}, caused_by)
         )
     for pid in inj.participants:
         person = people.get(pid)
@@ -78,13 +80,15 @@ def stub_institution_reactions(
         hospital = block.nearest(inj.place or person.home_id, "hospital", "clinic")
         if hospital:
             out.append(
-                TimedEvent(t_abs + 25 * 60, "hospital.admitted", {"person": pid, "place": hospital.id})
+                TimedEvent(t_abs + 25 * 60, "hospital.admitted",
+                           {"person": pid, "place": hospital.id}, caused_by)
             )
         out.append(
             TimedEvent(
                 t_abs + 5 * 60,
                 "condition.set",
                 {"entity_id": pid, "kind": "injury", "intensity": inj.severity or 0.5, "stage": "er"},
+                caused_by,
             )
         )
         # the school (or workplace) calls home
@@ -107,6 +111,7 @@ def stub_institution_reactions(
                         "channel": "phone",
                         "text": f"Call from {who}: {person.given} has been in an accident; taken to hospital.",
                     },
+                    caused_by,
                 )
             )
     return out
@@ -180,7 +185,7 @@ def _commit(log: EventLog, timed: list[_Timed]) -> int:
         return 0
     log.commit(
         [
-            EventIn(type=ty, sim_time=t, payload=te.payload, provenance=prov)
+            EventIn(type=ty, sim_time=t, payload=te.payload, provenance=prov, caused_by=te.caused_by)
             for (t, _pid, ty, te, prov) in timed
         ]
     )
@@ -252,26 +257,31 @@ def run_simulation(
             overrides = compile_plan_overrides(results, people, day)
             total += len(results)
 
-        # 2. injections + stub reactions + reaction-scene triggers
+        # 2. injections (committed now, AFTER morning scenes — a 06:30 scene
+        #    must not see a 07:20 event) + stub reactions + reaction triggers
         extra: list[TimedEvent] = []
         reactions: dict[str, int] = {}  # household -> t_react (abs)
         for inj in injections or []:
             if inj.day != day:
                 continue
             t_abs = day * SECONDS_PER_DAY + inj.time_s
-            extra.append(
-                TimedEvent(
-                    t_abs,
-                    inj.type,
-                    {
-                        "place": inj.place,
-                        "participants": list(inj.participants),
-                        "severity": inj.severity,
-                        **inj.payload,
-                    },
-                )
-            )
-            extra.extend(stub_institution_reactions(inj, t_abs, block, people))
+            inj_seq = log.commit(
+                [
+                    EventIn(
+                        type=inj.type,
+                        sim_time=t_abs,
+                        payload={
+                            "place": inj.place,
+                            "participants": list(inj.participants),
+                            "severity": inj.severity,
+                            **inj.payload,
+                        },
+                        provenance="user",
+                    )
+                ]
+            )[0]
+            total += 1
+            extra.extend(stub_institution_reactions(inj, t_abs, block, people, caused_by=inj_seq))
             for pid in inj.participants:
                 hid = hh_of_person.get(pid)
                 if hid is None:

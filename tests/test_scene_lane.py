@@ -99,6 +99,10 @@ def test_injection_stub_reactions_and_attention(tmp_path, world):
                for e in student_after)
     assert any(e.payload.get("activity") == "admitted"
                for e in log.events() if e.payload.get("person") == student.id)
+    # consequence-cone lineage: every stub reaction points at the injection
+    inj_seq = next(e.seq for e in log.events(type="hazard.road.collision"))
+    for t in ("ambulance.dispatched", "hospital.admitted"):
+        assert all(e.caused_by == inj_seq for e in log.events(type=t))
 
 
 def test_reaction_scene_same_day_and_next_morning(tmp_path, world):

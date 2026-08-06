@@ -193,8 +193,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
                     "seq": e.seq, "t": e.sim_time, "day": e.sim_time // SECONDS_PER_DAY,
                     "hm": to_datetime(e.sim_time).strftime("%H:%M"),
                     "type": e.type, "routine": e.type in _ROUTINE,
+                    "caused_by": e.caused_by,
                     "text": _humanize(e, person_names, place_names),
                 })
+        lines.sort(key=lambda x: (x["t"], x["seq"]))
         hh = [
             {"id": m, "name": people[m].name, "age": people[m].age, "occupation": people[m].occupation}
             for m in hh_members.get(p.household_id, [])
@@ -235,9 +237,11 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
                 "seq": e.seq, "t": e.sim_time,
                 "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
                 "type": e.type, "provenance": e.provenance,
+                "caused_by": e.caused_by,
                 "text": _humanize(e, person_names, place_names),
                 "place": e.payload.get("place"),
             })
+        out.sort(key=lambda x: (x["t"], x["seq"]))
         return out
 
     @app.get("/api/positions")

@@ -193,8 +193,43 @@ function renderTicker() {
     .filter((e) => e.t <= now && !["memory.formed", "mood.delta", "plan.revised", "condition.set"].includes(e.type))
     .slice(-40).reverse();
   $("#tickerinner").innerHTML = rows.map((e) => `
-    <div class="tick${e.provenance === "user" ? " injected" : ""}" title="${esc(e.hm)}">
+    <div class="tick${e.provenance === "user" ? " injected" : ""}" data-seq="${e.seq}"
+         title="${e.provenance === "user" ? "injected event — click for consequences" : esc(e.hm)}">
       <b>${esc(e.hm)}</b> — ${linkNames(e.text)}</div>`).join("");
+}
+
+/* ---------- consequence cone ---------- */
+function showEventCone(seq) {
+  const root = state.ticker.find((e) => e.seq === seq);
+  if (!root) return;
+  const children = new Map();
+  for (const e of state.ticker) {
+    if (e.caused_by != null) {
+      if (!children.has(e.caused_by)) children.set(e.caused_by, []);
+      children.get(e.caused_by).push(e);
+    }
+  }
+  const cone = [];
+  const stack = [seq];
+  while (stack.length) {
+    for (const c of children.get(stack.pop()) || []) { cone.push(c); stack.push(c.seq); }
+  }
+  cone.sort((a, b) => a.t - b.t);
+  document.querySelector('[data-tab="person"]').click();
+  $("#panel-person").innerHTML = `
+    <div class="idcard">
+      <div class="avatar" style="background:var(--danger)">⚡</div>
+      <div><h2>Injected event</h2><div class="sub">${esc(root.hm)} — ${linkNames(root.text)}</div></div>
+    </div>
+    <details open><summary>Consequence cone (${cone.length} downstream events)</summary>
+      <div class="body">${cone.map((e) => `
+        <div class="evline notable">
+          <span class="k" style="background:${KIND_COLOR[e.type] || "var(--fg-faint)"}"></span>
+          <span class="t">${esc(e.hm)}</span>
+          <span class="txt">${linkNames(e.text)}</span>
+        </div>`).join("") || '<p class="hint">no linked consequences recorded</p>'}</div>
+    </details>
+    <p class="hint">Scenes triggered by this event appear in the Scenes tab (⚡ Reaction).</p>`;
 }
 
 /* ---------- timeline ---------- */
@@ -258,6 +293,7 @@ function positionCursor() {
 /* ---------- inspector: person ---------- */
 async function selectPerson(pid) {
   state.selected = pid;
+  history.replaceState(null, "", `#${pid}`);
   renderRail($("#search").value);
   document.querySelector('[data-tab="person"]').click();
   const d = await fetch(`/api/person/${pid}`).then((r) => r.json());
@@ -339,7 +375,11 @@ function renderScenesPanel() {
         ${(s.transcript || "").split("\n").filter(Boolean).map((line) => {
           const m = line.match(/^([^:]{2,40}):\s*(.*)$/);
           if (!m) return `<div class="narration">${esc(line)}</div>`;
-          const speaker = m[1].trim();
+          let speaker = m[1].trim();
+          if (/^person:/.test(speaker)) {           // old logs used ids as labels
+            const known = state.byId.get(speaker);
+            if (known) speaker = known.name.split(" ")[0];
+          }
           const pid = (state.people.find((p) => p.name.startsWith(speaker.split(" ")[0]) ) || {}).id || speaker;
           return `
             <div class="bubblewrap">
@@ -391,15 +431,22 @@ function wireControls() {
   $("#search").addEventListener("input", (e) => renderRail(e.target.value));
   document.body.addEventListener("click", (e) => {
     const a = e.target.closest(".plink, .person-row");
-    if (a) { e.preventDefault(); selectPerson(a.dataset.pid); }
+    if (a) { e.preventDefault(); selectPerson(a.dataset.pid); return; }
+    const tick = e.target.closest(".tick.injected");
+    if (tick) { showEventCone(Number(tick.dataset.seq)); return; }
     const tab = e.target.closest(".tab");
     if (tab) {
       document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === tab));
       document.querySelectorAll(".panel").forEach((x) =>
         x.classList.toggle("active", x.id === `panel-${tab.dataset.tab}`));
+      if (tab.dataset.tab === "scenes") history.replaceState(null, "", "#scenes");
     }
   });
   addEventListener("resize", drawTimeline);
+  // deep links: #person:000.1 opens a dossier, #scenes opens the scene reader
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h === "scenes") document.querySelector('[data-tab="scenes"]').click();
+  else if (h.startsWith("person:")) selectPerson(h);
 }
 
 function tickPlay() {

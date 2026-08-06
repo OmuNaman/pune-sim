@@ -162,9 +162,11 @@ def follow(
         f"household {person.household_id}, home {place_name(person.home_id)}"
     )
     log = EventLog(db)
-    for e in log.events():
-        if e.payload.get("person") != person_id:
-            continue
+    mine = sorted(
+        (e for e in log.events() if e.payload.get("person") == person_id),
+        key=lambda e: (e.sim_time, e.seq),
+    )
+    for e in mine:
         t = to_datetime(e.sim_time).strftime("%a %H:%M")
         if e.type == "trip.start":
             console.print(f"  {t}  walks from {place_name(e.payload['from'])} to {place_name(e.payload['to'])} ({e.payload['purpose']})")

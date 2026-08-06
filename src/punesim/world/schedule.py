@@ -19,6 +19,7 @@ class TimedEvent:
     sim_time: int
     type: str
     payload: dict
+    caused_by: int | None = None  # seq of the causing event (injection lineage)
 
 
 def _trip(events: list[TimedEvent], block: Block, person: Person, t: int, frm: str, to: str, purpose: str) -> int:

@@ -27,7 +27,7 @@ behavior or traits to any community; no slurs anywhere. If RECENT EVENTS contain
 serious, the family responds like a real family — worry, phone calls, changed plans.
 Output ONLY one JSON object; all fields optional, no extra fields:
 {"narration": "2-4 sentences",
- "transcript": "Name: line\\nName: line  (4-12 lines)",
+ "transcript": "Name: line\\nName: line  (4-12 lines; speaker labels are given names like 'Madhura:', never ids)",
  "memory_writes": [{"person_id": "...", "salience": 0.0-1.0, "summary": "..."}],
  "mood_deltas": [{"person_id": "...", "dim": "mood" or "stress", "delta": -1.0..1.0}],
  "messages": [{"sender": "...", "recipients": ["..."], "channel": "phone" or "talk", "text": "..."}],
@@ -71,13 +71,22 @@ def _humanize(e_type: str, payload: dict, block: Block) -> str:
 
 
 def recent_notable_events(
-    log: EventLog, member_ids: set[str], day: int, block: Block, limit: int = 12
+    log: EventLog,
+    member_ids: set[str],
+    day: int,
+    block: Block,
+    limit: int = 12,
+    until: int | None = None,
 ) -> list[str]:
-    """Non-routine events from yesterday onward that touch any member."""
+    """Non-routine events from yesterday onward that touch any member.
+    `until` bounds the scene's knowledge to its own sim-time — a 06:30 scene
+    must never see a 07:20 event that is already committed to the log."""
     since = max(0, (day - 1) * SECONDS_PER_DAY)
     out: list[str] = []
     for e in log.events():
         if e.sim_time < since or e.type in _ROUTINE_TYPES or e.type == "llm.response":
+            continue
+        if until is not None and e.sim_time >= until:
             continue
         touched = set()
         p = e.payload
@@ -309,7 +318,7 @@ def run_morning_scenes(
     sim_time = day * SECONDS_PER_DAY + SCENE_HOUR_S
     for hid in chosen_ids:
         hh = by_id[hid]
-        recent = recent_notable_events(log, set(hh.member_ids), day, block)
+        recent = recent_notable_events(log, set(hh.member_ids), day, block, until=sim_time)
         msgs = build_messages(block, hh, people, day, recent)
         res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
         seq = apply_delta(
@@ -332,7 +341,7 @@ def run_reaction_scene(
 ) -> SceneResult:
     """T2 event-driven scene: the household reacts the moment it learns —
     the mid-day lane the morning gate cannot provide (09 break B9, V0-thin)."""
-    recent = recent_notable_events(log, set(household.member_ids), day, block)
+    recent = recent_notable_events(log, set(household.member_ids), day, block, until=now_abs)
     msgs = build_reaction_messages(block, household, people, day, recent, now_abs)
     res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=now_abs)
     seq = apply_delta(
