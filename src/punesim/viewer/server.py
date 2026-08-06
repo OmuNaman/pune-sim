@@ -107,7 +107,11 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
             cur[pid] = (e.payload["at"], cur[pid][1])
             open_t[pid] = e.sim_time
         elif e.type == "activity.start":
-            cur[pid] = (e.payload.get("at", cur[pid][0]), e.payload.get("activity"))
+            at, act = cur[pid]
+            if e.sim_time > open_t[pid]:  # close the labelled span so activities never bleed backward
+                segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
+                open_t[pid] = e.sim_time
+            cur[pid] = (e.payload.get("at", at), e.payload.get("activity"))
     for pid, (at, act) in cur.items():
         segs[pid].append(_Seg(open_t[pid], max_t + SECONDS_PER_DAY, "at", at, None, act))
 
@@ -170,13 +174,18 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
         p = people.get(pid)
         if p is None:
             return {"error": "unknown person"}
-        memories, moods, lines = [], [], []
+        memories, moods, lines, interviews = [], [], [], []
         for e in events_cache:
             pl = e.payload
             if e.type == "memory.formed" and pl.get("person") == pid:
                 memories.append({"t": e.sim_time, "summary": pl.get("summary"), "salience": pl.get("salience")})
             elif e.type == "mood.delta" and pl.get("person") == pid:
                 moods.append({"t": e.sim_time, "dim": pl.get("dim"), "delta": pl.get("delta")})
+            elif e.type == "conversation.held" and pl.get("person") == pid:
+                interviews.append({
+                    "t": e.sim_time, "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                    "question": pl.get("question", ""), "answer": pl.get("answer", ""),
+                })
             touched = {pl.get("person"), pl.get("sender"), pl.get("entity_id"),
                        *(pl.get("recipients") or []), *(pl.get("participants") or [])}
             if pid in touched and e.type != "llm.response":
@@ -197,6 +206,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
             "home": p.home_id, "home_name": place_names.get(p.home_id, "home"),
             "work": p.work_id, "work_name": place_names.get(p.work_id, ""),
             "memories": memories, "moods": moods, "timeline": lines,
+            "interviews": interviews,
         }
 
     @app.get("/api/scenes")

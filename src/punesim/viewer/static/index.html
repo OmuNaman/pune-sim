@@ -1,1 +1,54 @@
-<!doctype html><title>pune-sim</title><p>frontend landing shortly - API is live at /api/meta
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pune Sim — Kasba Peth</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header id="topbar">
+  <div id="brand">पुणे<span>sim</span></div>
+  <div id="daynav">
+    <button id="prevday" title="previous day">◂</button>
+    <span id="daylabel">Day —</span>
+    <button id="nextday" title="next day">▸</button>
+  </div>
+  <div id="clock">--:--</div>
+  <button id="playbtn" title="play / pause">▶</button>
+  <div id="ticker"><div id="tickerinner"></div></div>
+  <div id="meta"></div>
+</header>
+
+<main>
+  <aside id="rail">
+    <input id="search" type="search" placeholder="search people… (name, occupation)" autocomplete="off">
+    <div id="people"></div>
+  </aside>
+
+  <section id="center">
+    <div id="map"></div>
+    <div id="timeline">
+      <div id="tl-phases"></div>
+      <canvas id="tl-canvas"></canvas>
+      <div id="tl-cursor"></div>
+    </div>
+  </section>
+
+  <aside id="inspector">
+    <div id="tabs">
+      <button class="tab active" data-tab="person">Person</button>
+      <button class="tab" data-tab="scenes">Scenes</button>
+    </div>
+    <div id="panel-person" class="panel active"><p class="hint">Click a person — on the map or in the rail.</p></div>
+    <div id="panel-scenes" class="panel"></div>
+  </aside>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
