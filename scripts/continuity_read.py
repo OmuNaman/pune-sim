@@ -143,20 +143,54 @@ def build_canon(log: EventLog, hh, people, block) -> list[str]:
     return lines
 
 
-def build_scenes(log: EventLog, hh) -> list[tuple[int, str]]:
-    out = []
+def build_scenes(log: EventLog, hh, people) -> list[tuple[int, str]]:
+    """Each scene as the model actually asserted it: prose plus the memories it
+    wrote and the messages it sent. Those payloads are where the first soak's
+    invented colleague lived — she never appeared in a transcript, only in a
+    memory summary, so a reader given prose alone cannot find her."""
+    scenes: dict[int, dict] = {}
     for e in log.events():
-        if e.type not in ("scene.morning", "scene.reaction"):
-            continue
-        if e.payload.get("household") != hh.id:
-            continue
-        day = e.sim_time // SECONDS_PER_DAY
-        kind = "MORNING" if e.type == "scene.morning" else "REACTION"
-        body = (
-            f"--- day {day}, {to_datetime(e.sim_time):%A %d %b %Y %H:%M} ({kind}) ---\n"
-            f"{e.payload.get('narration', '')}\n{e.payload.get('transcript', '')}"
-        )
-        out.append((day, body))
+        if e.type in ("scene.morning", "scene.reaction") and e.payload.get("household") == hh.id:
+            scenes[e.seq] = {
+                "t": e.sim_time,
+                "kind": "MORNING" if e.type == "scene.morning" else "REACTION",
+                "narration": e.payload.get("narration", ""),
+                "transcript": e.payload.get("transcript", ""),
+                "memories": [],
+                "messages": [],
+            }
+        elif e.caused_by in scenes:
+            s = scenes[e.caused_by]
+            if e.type == "memory.formed":
+                who = people.get(e.payload.get("person"))
+                s["memories"].append(
+                    f"    {who.given if who else e.payload.get('person')} will remember:"
+                    f" {e.payload.get('summary', '')}"
+                )
+            elif e.type == "message.sent":
+                to = ", ".join(
+                    (people[r].name if r in people else r)
+                    for r in e.payload.get("recipients") or []
+                )
+                sender = people.get(e.payload.get("sender"))
+                s["messages"].append(
+                    f"    {sender.given if sender else e.payload.get('sender')} -> {to}:"
+                    f" {e.payload.get('text', '')}"
+                )
+    out = []
+    for s in sorted(scenes.values(), key=lambda x: x["t"]):
+        day = s["t"] // SECONDS_PER_DAY
+        parts = [
+            f"--- day {day}, {to_datetime(s['t']):%A %d %b %Y %H:%M} ({s['kind']}) ---",
+            s["narration"], s["transcript"],
+        ]
+        if s["memories"]:
+            parts.append("  memories this scene wrote:")
+            parts.extend(s["memories"])
+        if s["messages"]:
+            parts.append("  messages this scene sent:")
+            parts.extend(s["messages"])
+        out.append((day, "\n".join(p for p in parts if p)))
     return out
 
 
@@ -166,7 +200,7 @@ def main() -> int:
     ap.add_argument("--household", default="hh:000")
     ap.add_argument("--seed", type=int, default=108)
     ap.add_argument("--households", type=int, default=80)
-    ap.add_argument("--batch", type=int, default=12, help="scenes per judge call")
+    ap.add_argument("--batch", type=int, default=6, help="scenes per judge call")
     ap.add_argument("--out", type=Path, default=None, help="write findings as JSON")
     args = ap.parse_args()
 
@@ -188,7 +222,7 @@ def main() -> int:
     log = EventLog(args.db)
     try:
         canon = build_canon(log, hh, people, block)
-        scenes = build_scenes(log, hh)
+        scenes = build_scenes(log, hh, people)
     finally:
         log.close()
     if not scenes:
@@ -199,6 +233,7 @@ def main() -> int:
     findings: list[Finding] = []
     notes: list[str] = []
     verdicts: list[str] = []
+    unread: list[str] = []
     for i in range(0, len(scenes), args.batch):
         chunk = scenes[i : i + args.batch]
         body = (
@@ -207,14 +242,23 @@ def main() -> int:
             + "\n\n".join(b for _, b in chunk)
             + "\n\n" + SCHEMA_HINT
         )
-        res = gw.call(
-            "qc_judge",
-            [{"role": "system", "content": SYSTEM}, {"role": "user", "content": body}],
-            Report,
-            temperature=0.0,
-            max_tokens=3000,
-            model_override=cfg.model_premium,
-        )
+        msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": body}]
+        # The premium reasoning model sometimes returns nothing at all on a long
+        # prompt — every token went to reasoning. Fall back to the workhorse
+        # rather than lose a batch: a read that silently skipped days would be
+        # worse than one done by a smaller model, as long as it says so.
+        res = None
+        for model in (cfg.model_premium, cfg.model_workhorse):
+            try:
+                res = gw.call(
+                    "qc_judge", msgs, Report, temperature=0.0,
+                    max_tokens=6000, model_override=model,
+                )
+                break
+            except Exception as err:  # noqa: BLE001 — refusal/schema/transport
+                unread.append(f"days {chunk[0][0]}-{chunk[-1][0]} via {model}: {type(err).__name__}")
+        if res is None:
+            continue
         findings.extend(res.parsed.findings)
         verdicts.append(res.parsed.verdict)
         if res.parsed.note:
@@ -224,8 +268,14 @@ def main() -> int:
     print(f"\n=== continuity read: {args.household} ({hh.surname} family), {args.db} ===")
     print(f"{len(scenes)} scenes over days {scenes[0][0]}-{scenes[-1][0]}, "
           f"judged by {cfg.model_premium} in {len(verdicts)} batches\n")
+    if unread:
+        print("  !! batches the judge could not read (NOT a pass for those days):")
+        for u in unread:
+            print(f"     {u}")
+        print()
     if not findings:
-        print("VERDICT: PASS — no contradictions found.")
+        print("VERDICT: PASS — no contradictions found." if not unread
+              else "VERDICT: PARTIAL — no contradictions in the batches that were read.")
     else:
         print(f"VERDICT: FAIL — {len(findings)} contradictions ({len(major)} major)\n")
         for f in sorted(findings, key=lambda x: (x.severity != "major", x.day)):
