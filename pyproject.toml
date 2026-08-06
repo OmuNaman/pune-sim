@@ -1,0 +1,40 @@
+[project]
+name = "punesim"
+version = "0.0.1"
+description = "LLM-driven life simulation of Pune, grounded in real data"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "numpy>=2.0",
+    "orjson>=3.10",
+    "typer>=0.12",
+    "rich>=13.7",
+    "prompt-toolkit>=3.0",
+    "openai>=1.40",
+    "tenacity>=8.4",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "hypothesis>=6.100",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+punesim = "punesim.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/punesim"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
