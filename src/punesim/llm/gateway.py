@@ -136,7 +136,8 @@ class Gateway:
 
     @staticmethod
     def request_id(
-        model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int
+        model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int,
+        attempt: int = 0,
     ) -> str:
         body = orjson.dumps(
             {
@@ -145,16 +146,18 @@ class Gateway:
                 "schema": schema_name,
                 "t": temperature,
                 "max": max_tokens,
+                **({"attempt": attempt} if attempt else {}),  # 0 keeps old ids valid
             },
             option=orjson.OPT_SORT_KEYS,
         )
         return blake2b(body, digest_size=16).hexdigest()
 
     def _fetch(
-        self, model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int
+        self, model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int,
+        attempt: int = 0,
     ) -> tuple[str, str, dict]:
         """Cassette-disciplined raw call. Returns (request_id, text, usage)."""
-        rid = self.request_id(model, messages, schema_name, temperature, max_tokens)
+        rid = self.request_id(model, messages, schema_name, temperature, max_tokens, attempt)
         if self.cfg.llm_mode == "replay":
             rec = self.cassette.get(rid)
             if rec is None:
@@ -193,11 +196,15 @@ class Gateway:
         status = "ok"
 
         rid, text, usage = self._fetch(model, messages, schema_name, temperature, max_tokens)
+        if not text.strip():  # provider blip, not a refusal — one distinct-slot retry
+            rid, text, usage = self._fetch(model, messages, schema_name, temperature, max_tokens, attempt=1)
 
         if detect_refusal(text):
             if model != self.cfg.model_premium:
                 model = self.cfg.model_premium  # rung 2b: skip repair, reroute once
                 rid, text, usage = self._fetch(model, messages, schema_name, temperature, max_tokens)
+                if not text.strip():
+                    rid, text, usage = self._fetch(model, messages, schema_name, temperature, max_tokens, attempt=1)
                 status = "rerouted_premium"
             if detect_refusal(text):
                 raise RefusalError(f"refused on both lanes (class={call_class}, id_class={identity_class})")

@@ -21,7 +21,7 @@ from .kernel.facts import Canon, PredicateRegistry, core_registry
 from .kernel.log import EventIn, EventLog
 from .kernel.timebase import SECONDS_PER_DAY
 from .kernel.worlddelta import PlanStep
-from .llm.gateway import Gateway
+from .llm.gateway import CassetteMiss, Gateway
 from .minds import info as info_mod
 from .population.synth import Household, Person
 from .world import hazards as hazards_mod
@@ -589,12 +589,21 @@ def run_simulation(
             rest = [x for x in timed if x[0] >= t_split]
             reaction_results = []
             for hid in sorted(reactions):
-                reaction_results.append(
-                    run_reaction_scene(
-                        log, gateway, state.canon, state.registry, block,
-                        hh_by_id[hid], people, day, now_abs=reactions[hid],
+                try:
+                    reaction_results.append(
+                        run_reaction_scene(
+                            log, gateway, state.canon, state.registry, block,
+                            hh_by_id[hid], people, day, now_abs=reactions[hid],
+                        )
                     )
-                )
+                except CassetteMiss:
+                    raise  # replay integrity is law 1
+                except Exception as err:  # noqa: BLE001 — skip loudly, the day goes on
+                    log.commit([EventIn(
+                        type="scene.skipped", sim_time=reactions[hid],
+                        payload={"household": hid, "reason": f"{type(err).__name__}: {err}"[:200]},
+                        provenance="system",
+                    )])
             total += len(reaction_results)
             rest_over = compile_plan_overrides(reaction_results, people, day)
             for pid, steps in rest_over.items():

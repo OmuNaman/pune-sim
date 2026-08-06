@@ -7,3 +7,4 @@ runs/
 .env
 data/anchors/*.pbf
 dist/
+.claude/
