@@ -1,0 +1,14 @@
+[
+  {
+    "day": 1,
+    "time": "07:20",
+    "type": "hazard.road.collision",
+    "place": "place:node/3681735096",
+    "participants": ["person:000.2"],
+    "severity": 0.6,
+    "payload": {
+      "mechanism": "school van clipped by a reversing truck at the school gate",
+      "note": "V0 exam scenario: Dnyaneshwar Chavan (10) injured on the morning school run"
+    }
+  }
+]

@@ -135,9 +135,17 @@ class Gateway:
         return resp.choices[0].message.content or "", usage
 
     @staticmethod
-    def request_id(model: str, messages: list[dict], schema_name: str, temperature: float) -> str:
+    def request_id(
+        model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int
+    ) -> str:
         body = orjson.dumps(
-            {"model": model, "messages": messages, "schema": schema_name, "t": temperature},
+            {
+                "model": model,
+                "messages": messages,
+                "schema": schema_name,
+                "t": temperature,
+                "max": max_tokens,
+            },
             option=orjson.OPT_SORT_KEYS,
         )
         return blake2b(body, digest_size=16).hexdigest()
@@ -146,7 +154,7 @@ class Gateway:
         self, model: str, messages: list[dict], schema_name: str, temperature: float, max_tokens: int
     ) -> tuple[str, str, dict]:
         """Cassette-disciplined raw call. Returns (request_id, text, usage)."""
-        rid = self.request_id(model, messages, schema_name, temperature)
+        rid = self.request_id(model, messages, schema_name, temperature, max_tokens)
         if self.cfg.llm_mode == "replay":
             rec = self.cassette.get(rid)
             if rec is None:

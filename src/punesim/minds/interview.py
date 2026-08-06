@@ -8,7 +8,7 @@ card, memories, and logged timeline. The conversation itself becomes canon
 from ..kernel.log import EventIn, EventLog
 from ..kernel.timebase import to_datetime
 from ..llm.gateway import Gateway
-from ..minds.scene import _humanize, _ROUTINE_TYPES
+from ..minds.scene import _ROUTINE_TYPES, _humanize
 from ..population.synth import Person
 from ..world.block import Block
 
@@ -69,7 +69,7 @@ def interview(
         f'The stranger asks: "{question}"',
     ]
     msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": "\n".join(card)}]
-    res = gateway.call("focal_turn", msgs, None, temperature=0.7, max_tokens=500, sim_time=last_t)
+    res = gateway.call("focal_turn", msgs, None, temperature=0.7, max_tokens=900, sim_time=last_t)
 
     if not ghost:
         seqs = log.commit(

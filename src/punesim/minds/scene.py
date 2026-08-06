@@ -37,6 +37,11 @@ Output ONLY one JSON object; all fields optional, no extra fields:
 Only include day_plan when today should differ from routine (someone stays home, a hospital
 visit, an errand). Use exactly the person ids and place ids given in the card."""
 
+REACTION_TASK = """It is {now} — the household has JUST learned of the most recent events above.
+Write their immediate reaction — who calls whom, who rushes where, what they decide right now.
+day_plan here means THE REST OF TODAY only (steps with t >= now, seconds since midnight): a parent
+rushing to the hospital, a shop left shut, a child collected early. Keep it real and specific."""
+
 _ROUTINE_TYPES = {"trip.start", "trip.end", "activity.start"}
 
 
@@ -89,13 +94,9 @@ def recent_notable_events(
     return out[-limit:]
 
 
-def build_messages(
-    block: Block,
-    household: Household,
-    people: dict[str, Person],
-    day: int,
-    recent: list[str],
-) -> list[dict]:
+def _card_lines(
+    block: Block, household: Household, people: dict[str, Person], day: int
+) -> list[str]:
     home = block.get(household.home_id)
     date = to_datetime(day * SECONDS_PER_DAY).strftime("%A, %d %B %Y")
     lines = [f"HOUSEHOLD CARD — {household.surname} family ({household.template}), {date}"]
@@ -108,6 +109,17 @@ def build_messages(
             work = f", goes to {wp.name if wp and wp.name else p.work_id} [{p.work_id}]"
         lines.append(f"- {p.id}  {p.name}, {p.age}, {p.occupation}{work}")
     lines.append("")
+    return lines
+
+
+def build_messages(
+    block: Block,
+    household: Household,
+    people: dict[str, Person],
+    day: int,
+    recent: list[str],
+) -> list[dict]:
+    lines = _card_lines(block, household, people, day)
     if recent:
         lines.append("RECENT EVENTS:")
         lines.extend(recent)
@@ -115,6 +127,25 @@ def build_messages(
         lines.append("RECENT EVENTS: none — an ordinary morning.")
     lines.append("")
     lines.append("Write this household's morning scene.")
+    return [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": "\n".join(lines)},
+    ]
+
+
+def build_reaction_messages(
+    block: Block,
+    household: Household,
+    people: dict[str, Person],
+    day: int,
+    recent: list[str],
+    now_abs: int,
+) -> list[dict]:
+    lines = _card_lines(block, household, people, day)
+    lines.append("EVENTS (yesterday and TODAY so far):")
+    lines.extend(recent or ["- (nothing notable)"])
+    lines.append("")
+    lines.append(REACTION_TASK.format(now=to_datetime(now_abs).strftime("%H:%M")))
     return [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": "\n".join(lines)},
@@ -130,12 +161,13 @@ def apply_delta(
     household_id: str,
     sim_time: int,
     disclosure_tier: int = 0,
+    event_type: str = "scene.morning",
 ) -> int:
     """Commit the scene and its consequences; returns the scene event seq."""
     scene_seq = log.commit(
         [
             EventIn(
-                type="scene.morning",
+                type=event_type,
                 sim_time=sim_time,
                 payload={
                     "household": household_id,
@@ -279,9 +311,32 @@ def run_morning_scenes(
         hh = by_id[hid]
         recent = recent_notable_events(log, set(hh.member_ids), day, block)
         msgs = build_messages(block, hh, people, day, recent)
-        res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=1100, sim_time=sim_time)
+        res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
         seq = apply_delta(
             log, canon, registry, res.parsed, household_id=hid, sim_time=sim_time
         )
         results.append(SceneResult(household_id=hid, delta=res.parsed, scene_seq=seq))
     return results
+
+
+def run_reaction_scene(
+    log: EventLog,
+    gateway: Gateway,
+    canon: Canon,
+    registry: PredicateRegistry,
+    block: Block,
+    household: Household,
+    people: dict[str, Person],
+    day: int,
+    now_abs: int,
+) -> SceneResult:
+    """T2 event-driven scene: the household reacts the moment it learns —
+    the mid-day lane the morning gate cannot provide (09 break B9, V0-thin)."""
+    recent = recent_notable_events(log, set(household.member_ids), day, block)
+    msgs = build_reaction_messages(block, household, people, day, recent, now_abs)
+    res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=now_abs)
+    seq = apply_delta(
+        log, canon, registry, res.parsed,
+        household_id=household.id, sim_time=now_abs, event_type="scene.reaction",
+    )
+    return SceneResult(household_id=household.id, delta=res.parsed, scene_seq=seq)

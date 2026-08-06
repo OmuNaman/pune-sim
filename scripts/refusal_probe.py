@@ -47,7 +47,8 @@ SYSTEM = """You write grounded, dignified scenes for a life simulation of Pune, 
 Rules: characters are fictional individuals; characters may hold and voice their real
 attitudes, including prejudice, because it is recorded character state — but the
 narration itself never attributes traits to any community, and no slurs ever.
-Marathi/Hindi/English code-mixing is welcome. Output ONLY a JSON object:
+Marathi/Hindi/English code-mixing is welcome. Output ONLY a JSON object, minified on a
+single line (no markdown fences, no pretty-printing):
 {"dialogue": [{"speaker": str, "line": str}, ...], "outcome_summary": str}"""
 
 # Each brief is tier-1 style: IDENTITY CONTEXT is governed canon, not stereotype bait.
@@ -148,36 +149,37 @@ def main(
         raise typer.Exit()
 
     gw = Gateway(cfg, Cassette(cfg.cassette_path))
-    rows: list[dict] = []
     tally: dict[str, dict[str, int]] = {m: {} for m in model_list}
-    for model in model_list:
-        for pid, brief in BATTERY:
-            msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": brief}]
-            try:
-                r = gw.call("scene", msgs, ProbeOut, temperature=0.6, max_tokens=900, model_override=model)
-                status, note = r.status, r.parsed.outcome_summary[:80]
-            except RefusalError:
-                status, note = "refused", ""
-            except SchemaError as e:
-                status, note = "schema_fail", str(e)[:80]
-            except CassetteMiss:
-                status, note = "cassette_miss", "run with PUNESIM_LLM=record"
-            tally[model][status] = tally[model].get(status, 0) + 1
-            rows.append({"model": model, "probe": pid, "status": status, "note": note})
-            console.print(f"  {model} · {pid}: [bold]{status}[/bold]")
-
     out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("w", newline="", encoding="utf-8") as f:
+    with out.open("w", newline="", encoding="utf-8") as f:  # incremental: crash keeps rows
         w = csv.DictWriter(f, fieldnames=["model", "probe", "status", "note"])
         w.writeheader()
-        w.writerows(rows)
+        for model in model_list:
+            for pid, brief in BATTERY:
+                msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": brief}]
+                try:
+                    r = gw.call("scene", msgs, ProbeOut, temperature=0.6, max_tokens=2000, model_override=model)
+                    status, note = r.status, r.parsed.outcome_summary[:80]
+                except RefusalError:
+                    status, note = "refused", ""
+                except SchemaError as e:
+                    status, note = "schema_fail", str(e)[:80]
+                except CassetteMiss:
+                    status, note = "cassette_miss", "run with PUNESIM_LLM=record"
+                except Exception as e:  # API/provider errors must not kill the run
+                    status, note = "api_error", f"{type(e).__name__}: {e}"[:120]
+                tally[model][status] = tally[model].get(status, 0) + 1
+                w.writerow({"model": model, "probe": pid, "status": status, "note": note})
+                f.flush()
+                console.print(f"  {model} · {pid}: [bold]{status}[/bold]")
 
+    cols = ("ok", "repaired", "rerouted_premium", "refused", "schema_fail", "api_error")
     table = Table(title=f"Refusal probe — {len(BATTERY)} briefs")
     table.add_column("model")
-    for col in ("ok", "repaired", "rerouted_premium", "refused", "schema_fail"):
+    for col in cols:
         table.add_column(col, justify="right")
     for m, t in tally.items():
-        table.add_row(m, *(str(t.get(c, 0)) for c in ("ok", "repaired", "rerouted_premium", "refused", "schema_fail")))
+        table.add_row(m, *(str(t.get(c, 0)) for c in cols))
     console.print(table)
     console.print(f"Detail: {out}")
 

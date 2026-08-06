@@ -1,10 +1,17 @@
-"""V0 engine: clockwork days, scene integration, injections, stub institutions.
+"""V0 engine: clockwork days, scenes, injections, stub institutions.
 
-The day pipeline: (1) morning scenes for spotlit households (optional, LLM),
-(2) compile everyone's day — routine templates, or scene-revised plans for
-people whose family changed today — merged with injected events and the stub
-institutions' timed reactions, (3) commit in sim-time order. Two runs from the
-same seed + same cassettes are hash-identical.
+Day pipeline:
+  1. T1 morning scenes for spotlit households (06:30, may revise routines);
+  2. compile the day: routine templates or scene-revised plans, merged with
+     injected events and stub-institution reactions; hospital admissions
+     mechanically invalidate the patient's remaining day (plan invalidation);
+  3. if an injection touches a household and minds are on, the day SPLITS at
+     the moment the family learns: phase A commits, the T2 reaction scene runs
+     right there (it can rewrite the rest of the family's day), then phase B
+     commits. This is the same-day lane the morning gate cannot provide
+     (09-collective-dynamics break B9, V0-thin).
+
+Two runs from the same seed + same cassettes are hash-identical.
 """
 
 from dataclasses import dataclass, field
@@ -18,6 +25,12 @@ from .llm.gateway import Gateway
 from .population.synth import Household, Person
 from .world.block import Block
 from .world.schedule import TimedEvent, day_events
+
+REACTION_DELAY_S = 35 * 60  # the family reacts ~35 min after the event (post phone call)
+
+# (sim_time, person_key, type, event, provenance)
+_Timed = tuple[int, str, str, TimedEvent, str]
+_ORDER = {"trip.end": 0, "activity.start": 1, "trip.start": 2}
 
 
 @dataclass(frozen=True)
@@ -99,10 +112,9 @@ def stub_institution_reactions(
     return out
 
 
-def _compile_override(
-    person: Person, steps: list[PlanStep], block: Block
-) -> list[TimedEvent]:
-    """A scene-revised day: walk trips between consecutive planned places."""
+def _compile_override(person: Person, steps: list[PlanStep], block: Block) -> list[TimedEvent]:
+    """A scene-revised (part of a) day: walk trips between planned places.
+    V0 simplification: the walk starts from home."""
     ev: list[TimedEvent] = []
     current = person.home_id
     for s in steps:
@@ -124,6 +136,57 @@ def _compile_override(
     return ev
 
 
+def _compile_day(
+    run_seed: int,
+    block: Block,
+    people: dict[str, Person],
+    day: int,
+    plan_overrides: dict[str, list[PlanStep]] | None,
+) -> list[_Timed]:
+    overrides = plan_overrides or {}
+    timed: list[_Timed] = []
+    for pid in sorted(people):
+        evs = (
+            _compile_override(people[pid], overrides[pid], block)
+            if pid in overrides
+            else day_events(run_seed, people[pid], block, day)
+        )
+        for te in evs:
+            timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    return timed
+
+
+def _apply_admissions(timed: list[_Timed], extra: list[TimedEvent]) -> list[_Timed]:
+    """Mechanical plan invalidation: an admitted person's remaining day is
+    cancelled and replaced by being at the hospital."""
+    admissions = [
+        (te.payload["person"], te.sim_time, te.payload["place"])
+        for te in extra
+        if te.type == "hospital.admitted"
+    ]
+    for pid, t_adm, place in admissions:
+        timed = [x for x in timed if not (x[1] == pid and x[0] > t_adm)]
+        te = TimedEvent(t_adm, "activity.start", {"person": pid, "at": place, "activity": "admitted"})
+        timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    return timed
+
+
+def _sorted(timed: list[_Timed]) -> list[_Timed]:
+    return sorted(timed, key=lambda x: (x[0], x[1], _ORDER.get(x[2], 9), x[2]))
+
+
+def _commit(log: EventLog, timed: list[_Timed]) -> int:
+    if not timed:
+        return 0
+    log.commit(
+        [
+            EventIn(type=ty, sim_time=t, payload=te.payload, provenance=prov)
+            for (t, _pid, ty, te, prov) in timed
+        ]
+    )
+    return len(timed)
+
+
 def run_day(
     log: EventLog,
     run_seed: int,
@@ -135,29 +198,12 @@ def run_day(
     extra: list[TimedEvent] | None = None,
     extra_provenance: str = "user",
 ) -> int:
-    """Commit one clockwork day. Overridden people follow their revised plan."""
-    overrides = plan_overrides or {}
-    timed: list[tuple[int, str, str, TimedEvent, str]] = []
-    order = {"trip.end": 0, "activity.start": 1, "trip.start": 2}
-
-    for pid in sorted(people):
-        evs = (
-            _compile_override(people[pid], overrides[pid], block)
-            if pid in overrides
-            else day_events(run_seed, people[pid], block, day)
-        )
-        for te in evs:
-            timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    """One clockwork day, committed whole (zero-LLM path)."""
+    timed = _compile_day(run_seed, block, people, day, plan_overrides)
+    timed = _apply_admissions(timed, extra or [])
     for te in extra or []:
         timed.append((te.sim_time, "~injected", te.type, te, extra_provenance))
-
-    timed.sort(key=lambda x: (x[0], x[1], order.get(x[2], 9), x[2]))
-    batch = [
-        EventIn(type=te.type, sim_time=t, payload=te.payload, provenance=prov)
-        for (t, _pid, _ty, te, prov) in timed
-    ]
-    log.commit(batch)
-    return len(batch)
+    return _commit(log, _sorted(timed))
 
 
 @dataclass
@@ -182,13 +228,15 @@ def run_simulation(
     injections: list[Injection] | None = None,
 ) -> tuple[int, SimState]:
     """The V0 day pipeline. Returns (total events, final state)."""
-    from .minds.scene import compile_plan_overrides, run_morning_scenes
+    from .minds.scene import compile_plan_overrides, run_morning_scenes, run_reaction_scene
 
     state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
     total = 0
     hh_of_person = {p.id: p.household_id for p in people.values()}
+    hh_by_id = {h.id: h for h in households}
 
     for day in range(start_day, start_day + days):
+        # 1. T1 morning scenes
         overrides: dict[str, list[PlanStep]] = {}
         if gateway is not None and scenes_k > 0:
             all_ids = [h.id for h in households]
@@ -204,7 +252,9 @@ def run_simulation(
             overrides = compile_plan_overrides(results, people, day)
             total += len(results)
 
+        # 2. injections + stub reactions + reaction-scene triggers
         extra: list[TimedEvent] = []
+        reactions: dict[str, int] = {}  # household -> t_react (abs)
         for inj in injections or []:
             if inj.day != day:
                 continue
@@ -223,12 +273,48 @@ def run_simulation(
             )
             extra.extend(stub_institution_reactions(inj, t_abs, block, people))
             for pid in inj.participants:
-                if pid in hh_of_person:
-                    state.attention.bump(hh_of_person[pid], 5.0, tick=day * 288)
+                hid = hh_of_person.get(pid)
+                if hid is None:
+                    continue
+                state.attention.bump(hid, 5.0, tick=day * 288)
+                if gateway is not None:
+                    reactions[hid] = max(reactions.get(hid, 0), t_abs + REACTION_DELAY_S)
 
-        total += run_day(
-            log, run_seed, block, people, day, plan_overrides=overrides, extra=extra
-        )
+        # 3. compile + invalidate + commit (split when a family reacts mid-day)
+        timed = _compile_day(run_seed, block, people, day, overrides)
+        timed = _apply_admissions(timed, extra)
+        for te in extra:
+            timed.append((te.sim_time, "~injected", te.type, te, "user"))
+        timed = _sorted(timed)
+
+        if reactions:
+            t_split = min(reactions.values())
+            total += _commit(log, [x for x in timed if x[0] < t_split])
+            rest = [x for x in timed if x[0] >= t_split]
+            reaction_results = []
+            for hid in sorted(reactions):
+                reaction_results.append(
+                    run_reaction_scene(
+                        log, gateway, state.canon, state.registry, block,
+                        hh_by_id[hid], people, day, now_abs=reactions[hid],
+                    )
+                )
+            total += len(reaction_results)
+            rest_over = compile_plan_overrides(reaction_results, people, day)
+            for pid, steps in rest_over.items():
+                person = people.get(pid)
+                if person is None:
+                    continue
+                rest = [x for x in rest if not (x[1] == pid and x[4] == "clockwork")]
+                clamped = [
+                    PlanStep(t=max(s.t, t_split), place_ref=s.place_ref, activity=s.activity, mode=s.mode)
+                    for s in steps
+                ]
+                for te in _compile_override(person, clamped, block):
+                    rest.append((max(te.sim_time, t_split), pid, te.type, te, "clockwork"))
+            total += _commit(log, _sorted(rest))
+        else:
+            total += _commit(log, timed)
     return total, state
 
 
