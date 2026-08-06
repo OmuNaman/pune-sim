@@ -1,0 +1,32 @@
+[
+  {
+    "day": 5,
+    "time": "11:40",
+    "type": "hazard.road.collision",
+    "place": "place:node/11430153883",
+    "participants": ["person:002.2"],
+    "severity": 0.55
+  },
+  {
+    "day": 12,
+    "time": "17:45",
+    "type": "info.rumor",
+    "place": "place:node/10172994194",
+    "participants": ["person:014.0", "person:035.3"],
+    "payload": {
+      "credence": 0.8,
+      "claim": {
+        "key": "cl:mandal_funds",
+        "subject": "place:node/10172994194",
+        "predicate": "misappropriated",
+        "topics": ["fraud"],
+        "quantity": 200000,
+        "unit": "rupees",
+        "charge": 0.75,
+        "specificity": 0.45,
+        "veracity": "unknown",
+        "valence": -0.6
+      }
+    }
+  }
+]
