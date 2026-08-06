@@ -432,14 +432,19 @@ class Audit:
         if not heard:
             self.add("INFO-ECHO", "SKIP", "no rumours in this run")
             return
-        echoes = [
-            f"seq{e.seq} d{e.day}: {e.payload['person']} is in its own chain"
-            for e in heard
-            if e.payload.get("person") in (e.payload.get("lineage") or [])
-        ]
-        self.add("INFO-ECHO", "FAIL" if echoes else "PASS",
-                 f"{len(echoes)} of {len(heard)} hearings came back to their own teller (limit 0)",
-                 echoes[:20])
+        if not any("lineage" in e.payload for e in heard):
+            # Pre-V1.1 logs carry no transmission chain, so "no echoes found"
+            # would mean "cannot look" — which must never read as a pass.
+            self.add("INFO-ECHO", "SKIP", "this log predates lineage on info.heard — cannot check")
+        else:
+            echoes = [
+                f"seq{e.seq} d{e.day}: {e.payload['person']} is in its own chain"
+                for e in heard
+                if e.payload.get("person") in (e.payload.get("lineage") or [])
+            ]
+            self.add("INFO-ECHO", "FAIL" if echoes else "PASS",
+                     f"{len(echoes)} of {len(heard)} hearings came back to their own teller (limit 0)",
+                     echoes[:20])
 
         fields = ("text", "quantity", "specificity", "veracity", "blame", "ops")
         witness: dict[tuple[str, str], dict] = {}
