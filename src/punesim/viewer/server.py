@@ -127,6 +127,24 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
     if t == "info.rumor":
         claim = p.get("claim", {})
         return f"A rumor starts: “{claim.get('text', '')}”"
+    if t == "complaint.registered":
+        org = {"org:pmc_water": "the PMC water office", "org:mseb": "the electricity board"}
+        return f"A complaint reaches {org.get(p.get('org'), p.get('org', '?'))} about {nm(p.get('place'))}"
+    if t == "utility.tanker_arrived":
+        return f"A municipal tanker reaches {nm(p.get('place'))} ({p.get('loads', 1)} load(s))"
+    if t == "utility.restored":
+        return f"{str(p.get('utility', 'supply')).title()} is back around {nm(p.get('place'))}"
+    if t == "scene.invalid_ref":
+        parts = []
+        if p.get("ids"):
+            parts.append(f"invented ids dropped: {', '.join(p['ids'])}")
+        if p.get("repeat_memories"):
+            parts.append(f"repeated memories dropped for {len(p['repeat_memories'])}")
+        return f"(canon gate, {p.get('household')}: {'; '.join(parts)})"
+    if t == "run.meta":
+        return f"Run begins — seed {p.get('seed')}, {p.get('households')} households, {p.get('days')} days"
+    if t == "fact.established":
+        return f"Canon: {nm(p.get('subject'))} — {p.get('predicate')} = {p.get('value')}"
     return f"{t}: {orjson.dumps(p).decode()[:120]}"
 
 
@@ -387,6 +405,11 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> Fas
                         "source": person_names.get(pl.get("source"), pl.get("source")),
                         "channel": pl.get("channel"), "credence": pl.get("credence"),
                         "hop": c.get("hop", 0),
+                        # the mouths it came through, oldest first — the chain a
+                        # story actually travelled, not just how many hops
+                        "chain": [
+                            person_names.get(x, x) for x in (pl.get("lineage") or [])
+                        ],
                     })
                 if f["origin_type"] is None:
                     root, hops = e, 0

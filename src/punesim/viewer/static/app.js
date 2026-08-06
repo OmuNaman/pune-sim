@@ -60,6 +60,9 @@ const KIND_COLOR = {
   "police.fir.registered": "var(--phone)", "fir.update": "var(--phone)",
   "crowd.gathered": "var(--danger)", "police.deployed": "var(--phone)",
   "curfew.imposed": "var(--danger)", "unrest.communal_tension": "var(--danger)",
+  "complaint.registered": "var(--phone)", "utility.tanker_arrived": "var(--rumor)",
+  "utility.restored": "var(--rumor)", "scene.invalid_ref": "var(--fg-faint)",
+  "fact.established": "var(--memory)", "run.meta": "var(--fg-faint)",
 };
 
 /* Linkify known person names inside humanized sentences. */
@@ -470,7 +473,8 @@ function renderRumorsPanel() {
               <span class="t">${esc(s.hm)}</span>
               <span class="txt"><a class="plink" data-pid="${s.person_id}" href="#">${esc(s.person)}</a>
                 ${s.channel === "witness" ? "saw it" : s.channel === "household" ? `heard at home from ${esc(s.source)}` : `heard from ${esc(s.source)}`}
-                <span class="cred" title="belief after hearing">${Math.round((s.credence || 0) * 100)}%</span></span>
+                <span class="cred" title="belief after hearing">${Math.round((s.credence || 0) * 100)}%</span>
+                ${s.chain && s.chain.length ? `<span class="chain" title="the mouths this version came through">${s.chain.map(esc).join(" → ")} →</span>` : ""}</span>
             </div>`).join("")}</div>
         </details>
       </div>
