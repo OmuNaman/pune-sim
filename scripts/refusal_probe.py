@@ -166,7 +166,7 @@ def main(
                     status, note = "schema_fail", str(e)[:80]
                 except CassetteMiss:
                     status, note = "cassette_miss", "run with PUNESIM_LLM=record"
-                except Exception as e:  # API/provider errors must not kill the run
+                except Exception as e:  # noqa: BLE001 — API/provider errors must not kill the probe
                     status, note = "api_error", f"{type(e).__name__}: {e}"[:120]
                 tally[model][status] = tally[model].get(status, 0) + 1
                 w.writerow({"model": model, "probe": pid, "status": status, "note": note})

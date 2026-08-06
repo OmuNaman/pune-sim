@@ -34,16 +34,57 @@ MONTHLY_INCOME = {
     "priest": 12000, "student": 0, "homemaker": 0, "retired": 8000, "infant": 0,
 }
 WORK_DAYS_PER_MONTH = 26
+
+# Household spending. Anchored on HCES 2023-24 (MoSPI): all-India URBAN MPCE
+# ₹6,996/person/month, Maharashtra above the national average; carried to 2026
+# at ~8%/yr nominal and adjusted DOWN for the old city, which is poorer than
+# Pune's average. The fixed term is the part that does not shrink with family
+# size (rent, power, water) — which is why living alone is dear per head.
+# provenance=estimate; see docs/subsystems for the anchor discipline.
+COST_FIXED = 4500.0
+COST_PER_HEAD = 5200.0
+# A PG/hostel student is not destitute — their money comes from home. Without
+# this, every student household ran a pure deficit and starved on schedule.
+PG_REMITTANCE = (9000.0, 14000.0)
 LOAN_MONTHLY_RATE = 0.03  # the moneylender's rate; banks come with V3
 FIR_SEVERITY_MIN = 0.4
+
+# Evidence that a workday was LOST. Everything else counts as worked.
+#
+# The inverse rule (a whitelist of "worked" activity strings) was a one-way
+# ratchet: half the block has no fixed workplace, and a scene that narrates
+# someone going to work writes free text ("leave for two housecleaning jobs"),
+# which no whitelist matches. Absence is the rare, observable thing — so
+# absence is what we detect.
+ABSENT_ACTIVITIES = {"admitted", "rest_at_home", "shelters_at_home", "stays_home"}
+
+
+def absent_today(state: "ProcState", day: int, log_events_today: list) -> set[str]:
+    """Who demonstrably did not work today: in hospital, convalescing at home,
+    sheltering under a curfew, or keeping away from somewhere they fear."""
+    out = {
+        e.payload.get("person")
+        for e in log_events_today
+        if (e.type == "activity.start" and e.payload.get("activity") in ABSENT_ACTIVITIES)
+        or e.type == "hospital.admitted"
+    }
+    out |= {pid for pid, (until, _) in state.in_hospital.items() if day < until}
+    out |= {pid for pid, until in state.rest.items() if day < until}
+    out.discard(None)
+    return out
 
 
 @dataclass
 class Finances:
     liquid: float
-    monthly_income: float
+    monthly_income: float  # earned wages
     monthly_costs: float
     loans: float = 0.0  # outstanding informal principal
+    monthly_support: float = 0.0  # remittances — money that arrives without work
+
+    @property
+    def monthly_inflow(self) -> float:
+        return self.monthly_income + self.monthly_support
 
 
 @dataclass
@@ -63,10 +104,17 @@ def init_finances(
     out: dict[str, Finances] = {}
     for hh in households:
         income = float(sum(MONTHLY_INCOME.get(people[m].occupation, 12000) for m in hh.member_ids))
-        costs = 6000.0 + 2600.0 * len(hh.member_ids)
+        costs = COST_FIXED + COST_PER_HEAD * len(hh.member_ids)
         rng = keyed_rng(run_seed, "finance", hh.id, 0, "init")
-        liquid = max(1500.0, income * (0.5 + rng.random() * 1.8))
-        out[hh.id] = Finances(liquid=round(liquid, -2), monthly_income=income, monthly_costs=costs)
+        support = 0.0
+        if hh.template == "pg_students":
+            lo, hi = PG_REMITTANCE
+            support = float(sum(lo + rng.random() * (hi - lo) for _ in hh.member_ids))
+        liquid = max(1500.0, (income + support) * (0.5 + rng.random() * 1.8))
+        out[hh.id] = Finances(
+            liquid=round(liquid, -2), monthly_income=income, monthly_costs=costs,
+            monthly_support=round(support, -2),
+        )
     return out
 
 
@@ -75,7 +123,7 @@ def p_financial(f: Finances) -> float:
     The runway term has gradient up to 2.5 months of costs saved — a ₹24k
     hospital bill is invisible to the comfortable and a cliff to the poor."""
     runway = 1.0 - f.liquid / (2.5 * f.monthly_costs)
-    debt = f.loans / max(f.monthly_income, 4000.0)
+    debt = f.loans / max(f.monthly_inflow, 4000.0)
     return round(min(1.0, max(0.0, 0.12 + 0.6 * max(0.0, runway) + min(0.3, 0.3 * debt))), 3)
 
 
@@ -182,11 +230,7 @@ def daily_finance_tick(
     """Earn, spend, pay bills, borrow when short, accrue interest.
     Returns ([(event, caused_by)] to commit now, {person: p_financial})."""
     out: list[tuple[TimedEvent, int | None]] = []
-    worked = {
-        e.payload.get("person")
-        for e in log_events_today
-        if e.type == "activity.start" and e.payload.get("activity") in ("work", "driving_rounds")
-    }
+    absent = absent_today(state, day, log_events_today)
     t_night = (day + 1) * SECONDS_PER_DAY - 600
 
     by_hh: dict[str, list[Person]] = {}
@@ -204,10 +248,10 @@ def daily_finance_tick(
             from ..engine import DAILY_WAGE  # single source for the wage split
 
             if p.occupation in DAILY_WAGE:
-                earned += daily if p.id in worked else 0.0
+                earned += 0.0 if p.id in absent else daily  # no work, no wage
             else:
-                earned += daily
-        f.liquid += earned - f.monthly_costs / 30.0
+                earned += daily  # a salaried month survives a few sick days
+        f.liquid += earned + f.monthly_support / 30.0 - f.monthly_costs / 30.0
 
         for e in log_events_today:
             if e.type == "hospital.discharged" and e.payload.get("household") == hid:

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from punesim.config import Config
 from punesim.llm import Cassette, CassetteMiss, Gateway, RefusalError, detect_refusal
+from punesim.llm.gateway import SchemaError
 
 
 class SceneOut(BaseModel):
@@ -104,6 +105,42 @@ def test_repair_round_fixes_bad_json(tmp_path):
     g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
     r = g.call("scene", MSGS, SceneOut)
     assert r.status == "repaired" and r.parsed.mood == 0.4 and len(t.calls) == 2
+
+
+_PROSE = (
+    "The morning light falls across the courtyard and the family gathers for chai, "
+    "speaking quietly about the day ahead and the work that waits for each of them."
+)
+
+
+def test_schema_failure_resamples_before_giving_up(tmp_path):
+    """A model stuck in prose keeps apologizing in prose through the repair
+    round; one clean resample of the ORIGINAL prompt rescues the scene."""
+    t = FakeTransport(
+        {"fake/workhorse": [_PROSE, _PROSE, '{"outcome": "resolved", "mood": 0.1}']}
+    )
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
+    r = g.call("scene", MSGS, SceneOut)
+    assert r.status == "resampled" and r.parsed.mood == 0.1
+    assert len(t.calls) == 3
+
+
+def test_schema_failure_still_raises_when_resample_fails(tmp_path):
+    t = FakeTransport({"fake/workhorse": [_PROSE, _PROSE, _PROSE]})
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
+    with pytest.raises(SchemaError):
+        g.call("scene", MSGS, SceneOut)
+
+
+def test_resample_never_softens_replay_integrity(tmp_path):
+    """Law 1: a replay miss inside the resample slot is still a hard error."""
+    t = FakeTransport({"fake/workhorse": [_PROSE, _PROSE]})
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
+    with pytest.raises(IndexError):  # transport exhausted rather than templating
+        g.call("scene", MSGS, SceneOut)
+    g2 = Gateway(_cfg(tmp_path, "replay"), Cassette(tmp_path / "c2.db"), transport=FakeTransport({}))
+    with pytest.raises(CassetteMiss):
+        g2.call("scene", MSGS, SceneOut)
 
 
 def test_detect_refusal_heuristics():

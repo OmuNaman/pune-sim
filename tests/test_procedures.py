@@ -152,3 +152,78 @@ def test_procedures_are_deterministic(tmp_path, world):
         engine.run_simulation(log, SEED, block, hhs, people, days=12, injections=[inj])
         hashes.append(log.determinism_hash())
     assert hashes[0] == hashes[1]
+
+
+def test_roaming_trades_work_a_real_day_and_stop_ratcheting(tmp_path, world):
+    """The V1 soak's worst bug: adults with no fixed workplace never emitted a
+    "worked" activity, earned nothing for a month, and re-crossed the financial
+    threshold forever. They now go to client houses / the stand, and absence —
+    not the wording of an activity string — is what costs a wage."""
+    block, hhs, people = world
+    from punesim.world.schedule import ROAMING_WORK, roaming_worksites
+
+    sites = roaming_worksites(SEED, block, people)
+    roamers = [
+        p for p in people.values()
+        if p.work_id is None and p.occupation in ROAMING_WORK and 18 <= p.age < 62
+    ]
+    assert roamers, "fixture has no roaming trades to test"
+    assert all(sites.get(p.id) for p in roamers), "a roaming worker with nowhere to go"
+
+    log = EventLog(tmp_path / "roam.db")
+    _, state = engine.run_simulation(log, SEED, block, hhs, people, days=20)
+    for p in roamers:
+        days_out = {
+            e.sim_time // 86400 for e in log.events(type="activity.start")
+            if e.payload.get("person") == p.id
+            and e.payload.get("activity") in ("work", "driving_rounds")
+        }
+        assert len(days_out) >= 18, f"{p.id} ({p.occupation}) worked {len(days_out)}/20 days"
+        assert state.pressures[p.id]["p_financial"] < 0.99, f"{p.id} pinned at max worry"
+
+    refires = {}
+    for e in log.events(type="pressure.crossed"):
+        k = (e.payload["person"], e.payload["pressure"])
+        refires[k] = refires.get(k, 0) + 1
+    assert not [k for k, v in refires.items() if v > 1], f"re-crossings in 20 quiet days: {refires}"
+
+
+def test_a_lost_day_costs_a_daily_wage(world):
+    """Absence-based accounting still has to bite: shelter at home and the
+    daily-wage earner's household is measurably poorer that night."""
+    _, hhs, people = world
+    victim = next(
+        p for p in sorted(people.values(), key=lambda q: q.id)
+        if p.age >= 18 and p.occupation in engine.DAILY_WAGE
+    )
+
+    class _E:
+        def __init__(self, type_, payload):
+            self.type, self.payload, self.seq = type_, payload, 1
+
+    st = procedures.ProcState(finances=procedures.init_finances(SEED, hhs, people))
+    before = st.finances[victim.household_id].liquid
+    procedures.daily_finance_tick(st, 0, people, [])
+    worked_night = st.finances[victim.household_id].liquid
+
+    st2 = procedures.ProcState(finances=procedures.init_finances(SEED, hhs, people))
+    procedures.daily_finance_tick(
+        st2, 0, people,
+        [_E("activity.start", {"person": victim.id, "activity": "shelters_at_home"})],
+    )
+    assert st2.finances[victim.household_id].liquid < worked_night
+    assert worked_night > before - st.finances[victim.household_id].monthly_costs
+
+
+def test_student_households_live_on_money_from_home(world):
+    """A PG household earns nothing. Without remittances it starved on a
+    schedule, which is a modelling artefact, not Pune."""
+    _, hhs, people = world
+    fins = procedures.init_finances(SEED, hhs, people)
+    pg = [h for h in hhs if h.template == "pg_students"]
+    if not pg:
+        pytest.skip("no student households in this fixture")
+    for h in pg:
+        f = fins[h.id]
+        assert f.monthly_income == 0 and f.monthly_support > 0
+        assert f.monthly_inflow > f.monthly_costs * 0.6

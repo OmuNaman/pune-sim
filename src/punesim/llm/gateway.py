@@ -236,7 +236,24 @@ class Gateway:
                 )
             try:
                 parsed = schema.model_validate(orjson.loads(_extract_json(text2)))
-            except (ValueError, ValidationError) as err2:
-                raise SchemaError(f"failed after repair: {err2}") from err2
+            except (ValueError, ValidationError):
+                # The repair conversation can itself be the problem — a model that
+                # answered in prose once tends to keep apologizing in prose. One
+                # clean RESAMPLE of the original prompt in a distinct cassette
+                # slot, then we give up. (Replay integrity is untouched: a miss
+                # inside _fetch still raises CassetteMiss — law 1.)
+                rid3, text3, usage3 = self._fetch(
+                    model, messages, schema_name, temperature, max_tokens, attempt=2
+                )
+                if self.log is not None:
+                    self.log.record_llm_response(
+                        request_id=rid3, model=model, response_text=text3, usage=usage3, sim_time=sim_time
+                    )
+                try:
+                    parsed = schema.model_validate(orjson.loads(_extract_json(text3)))
+                except (ValueError, ValidationError) as err3:
+                    raise SchemaError(f"failed after repair and resample: {err3}") from err3
+                status = "rerouted_resampled" if status == "rerouted_premium" else "resampled"
+                return LLMResult(parsed, text3, model, rid3, usage3, status)
             status = "rerouted_repaired" if status == "rerouted_premium" else "repaired"
             return LLMResult(parsed, text2, model, rid2, usage2, status)

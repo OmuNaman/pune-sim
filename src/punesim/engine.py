@@ -28,7 +28,7 @@ from .population.synth import Household, Person
 from .world import hazards as hazards_mod
 from .world import unrest as unrest_mod
 from .world.block import Block
-from .world.schedule import TimedEvent, day_events
+from .world.schedule import TimedEvent, day_events, roaming_worksites
 
 REACTION_DELAY_S = 35 * 60  # the family reacts ~35 min after the event (post phone call)
 
@@ -159,14 +159,16 @@ def _compile_day(
     people: dict[str, Person],
     day: int,
     plan_overrides: dict[str, list[PlanStep]] | None,
+    worksites: dict[str, tuple[str, ...]] | None = None,
 ) -> list[_Timed]:
     overrides = plan_overrides or {}
+    sites = worksites or {}
     timed: list[_Timed] = []
     for pid in sorted(people):
         evs = (
             _compile_override(people[pid], overrides[pid], block)
             if pid in overrides
-            else day_events(run_seed, people[pid], block, day)
+            else day_events(run_seed, people[pid], block, day, sites.get(pid, ()))
         )
         for te in evs:
             timed.append((te.sim_time, pid, te.type, te, "clockwork"))
@@ -401,15 +403,16 @@ def _pressure_tick(
     p_health; a missed work day (or a household admission's bills) raises
     p_financial — daily-wage occupations feel it hardest. Upward crossings of
     the hysteresis threshold emit pressure.crossed and gate tomorrow's scene."""
-    worked, admitted, injured = set(), set(), {}
+    absent, admitted, injured = set(), set(), {}
     for e in today:
         pl = e.payload
-        if e.type == "activity.start" and pl.get("activity") in ("work", "driving_rounds", "school", "errand"):
-            worked.add(pl.get("person"))
+        if e.type == "activity.start" and pl.get("activity") in proc_mod.ABSENT_ACTIVITIES:
+            absent.add(pl.get("person"))  # absence is the observable thing, not work
         elif e.type == "hospital.admitted":
             admitted.add(pl.get("person"))
         elif e.type == "condition.set" and pl.get("kind") == "injury":
             injured[pl.get("entity_id")] = float(pl.get("intensity") or 0.5)
+    absent |= admitted
     events: list[EventIn] = []
     marks: dict[str, str] = {}
     t_tick = (day + 1) * SECONDS_PER_DAY - 300
@@ -429,7 +432,7 @@ def _pressure_tick(
                 q in admitted for q in hh_members.get(hh_of_person.get(pid, ""), ())
             )
             bump = 0.0
-            if pid not in worked:
+            if pid in absent:
                 bump += 0.09 if p.occupation in DAILY_WAGE else 0.04
             if hh_admitted:
                 bump += 0.05  # hospital bills land on the household
@@ -598,6 +601,7 @@ def run_simulation(
     hh_of_person = {p.id: p.household_id for p in people.values()}
     hh_by_id = {h.id: h for h in households}
     hh_members = {h.id: h.member_ids for h in households}
+    worksites = roaming_worksites(run_seed, block, people)
 
     for day in range(start_day, start_day + days):
         # 1. T1 morning scenes — routine-bypass gate: households marked by
@@ -624,7 +628,7 @@ def run_simulation(
 
         # 2. compile the day (scene plans win; beliefs, bodies and fear zones
         #    bend the rest)
-        timed = _compile_day(run_seed, block, people, day, overrides)
+        timed = _compile_day(run_seed, block, people, day, overrides, worksites)
         timed = _apply_beliefs(timed, people, state, day, skip=set(overrides))
         timed = _apply_stays(timed, people, state, day, skip=set(overrides))
         timed = _apply_zones(block, timed, people, state, day, skip=set(overrides))

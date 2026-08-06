@@ -9,9 +9,54 @@ from dataclasses import dataclass
 from ..kernel.rng import keyed_rng
 from ..kernel.timebase import SECONDS_PER_DAY
 from ..population.synth import Person
-from .block import Block
+from .block import Block, haversine_m
 
 _H = 3600
+
+# Trades that work a full day but have no fixed workplace in the block. Before
+# V1.1 these people simply stayed home: they earned nothing (finances-lite pays
+# daily wages only for a worked day), so their p_financial ratcheted forever,
+# and they never met anyone outside their own house.
+ROAMING_WORK = {"domestic_worker", "rickshaw_driver", "cook", "shop_assistant", "tailor"}
+CLIENTS_PER_DOMESTIC = 2
+NEAR_CLIENT_POOL = 12  # you work in your own lanes, not across the city
+WORK_ACTIVITIES = ("work", "driving_rounds", "school")  # what counts as a worked day
+
+
+def roaming_worksites(
+    run_seed: int, block: Block, people: dict[str, Person]
+) -> dict[str, tuple[str, ...]]:
+    """Where the no-fixed-workplace trades actually spend their day.
+
+    A domestic worker's day is *other people's houses* — which is exactly why
+    they are a block's best-connected carriers of news: the information graph
+    is built by who shares a room, not who shares a surname. Rickshaw drivers
+    wait at the market; the rest fall back to the nearest plausible venue.
+    Keyed per person, so adding this never perturbs anyone else's draws.
+    """
+    occupied = sorted({p.home_id for p in people.values()})
+    out: dict[str, tuple[str, ...]] = {}
+    for pid in sorted(people):
+        p = people[pid]
+        if p.work_id is not None or p.occupation not in ROAMING_WORK or not 18 <= p.age < 62:
+            continue
+        rng = keyed_rng(run_seed, "worksite", pid, 0, "assign")
+        if p.occupation == "domestic_worker":
+            src = block.get(p.home_id)
+            pool = [h for h in occupied if h != p.home_id and block.get(h)]
+            if src is not None:
+                pool.sort(
+                    key=lambda h: (haversine_m(src.lat, src.lon, block[h].lat, block[h].lon), h)
+                )
+            near = pool[:NEAR_CLIENT_POOL]
+            picks: list[str] = []
+            while near and len(picks) < CLIENTS_PER_DOMESTIC:
+                picks.append(near.pop(int(rng.integers(0, len(near)))))
+            out[pid] = tuple(picks)
+        else:
+            dest = block.nearest(p.home_id, "market", "shop", "restaurant", "bus_stop")
+            out[pid] = (dest.id,) if dest else ()
+    return out
 
 
 @dataclass(frozen=True)
@@ -32,7 +77,13 @@ def _trip(events: list[TimedEvent], block: Block, person: Person, t: int, frm: s
     return t + dur
 
 
-def day_events(run_seed: int, person: Person, block: Block, day: int) -> list[TimedEvent]:
+def day_events(
+    run_seed: int,
+    person: Person,
+    block: Block,
+    day: int,
+    worksites: tuple[str, ...] = (),
+) -> list[TimedEvent]:
     """One person's clockwork day, in absolute sim seconds."""
     base = day * SECONDS_PER_DAY
     rng = keyed_rng(run_seed, "schedule", person.id, day, "jitter")
@@ -58,7 +109,25 @@ def day_events(run_seed: int, person: Person, block: Block, day: int) -> list[Ti
         _trip(ev, block, person, back, person.work_id, home, "return_home")
         return ev
 
-    # homemaker / retired / roaming work: morning errand or worship visit
+    if worksites:
+        # a roaming trade's day: out to the client houses / the stand and back
+        activity = "driving_rounds" if person.occupation == "rickshaw_driver" else "work"
+        t = base + int(8.5 * _H) + int(rng.integers(-30, 31)) * 60
+        current = home
+        for site in worksites:
+            if block.get(site) is None:
+                continue
+            t = _trip(ev, block, person, t, current, site, "work")
+            ev.append(
+                TimedEvent(t, "activity.start", {"person": person.id, "at": site, "activity": activity})
+            )
+            current = site
+            t += int(rng.integers(110, 205)) * 60  # a couple of hours per stop
+        if current != home:
+            _trip(ev, block, person, t, current, home, "return_home")
+        return ev
+
+    # homemaker / retired: morning errand or worship visit
     if rng.random() < 0.55:
         worship_kind = {
             "hindu": "temple",
