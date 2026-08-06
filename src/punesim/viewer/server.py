@@ -328,6 +328,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> Fas
             # info.heard is high-volume gossip — it lives in the Rumors tab
             if e.type in _ROUTINE or e.type in (
                 "llm.response", "fact.established", "fact.superseded", "info.heard",
+                "run.meta",
             ):
                 continue
             out.append({

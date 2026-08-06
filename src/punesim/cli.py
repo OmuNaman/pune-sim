@@ -281,6 +281,134 @@ def compile(
 
 
 @app.command()
+def branch(
+    source: str = typer.Argument(help="source event log to fork, e.g. runs/exam/events.db"),
+    what_if: str = typer.Argument(None, help="free-text what-if (compiled) — or use --inject"),
+    inject: str = typer.Option(None, help="JSON scenario file of extra injections"),
+    add_days: int = typer.Option(0, help="extend the horizon by this many days"),
+    day: int = typer.Option(0, help="default day for the compiled what-if"),
+    db: str = typer.Option(None, help="branch output db (default runs/branches/<n>.db)"),
+    scenes: bool = typer.Option(False, "--scenes", help="LLM scenes in the branch (uses .env key)"),
+    k: int = typer.Option(5),
+) -> None:
+    """Fork a world, add a what-if, run both timelines, and diff them (V2)."""
+    from pathlib import Path
+
+    import orjson
+    from rich.console import Console
+
+    from punesim import branch as branch_mod
+    from punesim import config, engine
+    from punesim.kernel.diff import diff_logs
+    from punesim.kernel.log import EventLog
+    from punesim.llm import Cassette, Gateway
+    from punesim.minds.compiler import CompileError, compile_injection
+    from punesim.population import synthesize
+    from punesim.world.block import Block
+
+    console = Console()
+    cfg = config.from_env()
+    block = Block.load()
+    src_log = EventLog(source)
+    meta = branch_mod.read_meta(src_log)
+    src_log.close()
+    if meta is None:
+        console.print("[red]source log has no run.meta — re-run it once on this version first[/red]")
+        raise typer.Exit(1)
+    _, people = synthesize(int(meta["seed"]), block, n_households=int(meta["households"]))
+
+    extra: list[engine.Injection] = []
+    if inject:
+        extra += [engine.Injection.parse(o) for o in orjson.loads(Path(inject).read_bytes())]
+    if what_if:
+        gw = Gateway(cfg, Cassette(cfg.cassette_path))
+        try:
+            out = compile_injection(gw, block, people, what_if, default_day=day)
+        except CompileError as e:
+            console.print("[red]could not compile the what-if:[/red]")
+            for err in e.errors:
+                console.print(f"  - {err}")
+            raise typer.Exit(1) from e
+        console.rule("compiled what-if")
+        console.print(out.preview)
+        extra.append(out.injection)
+    if not extra:
+        console.print("[red]nothing to inject — pass a what-if text or --inject file[/red]")
+        raise typer.Exit(1)
+
+    if db is None:
+        db = f"runs/branches/{Path(source).parent.name or 'run'}-b1/events.db"
+    console.print(f"[dim]branching {source} -> {db} …[/dim]")
+    res = branch_mod.branch_run(
+        source, db, block=block, synthesize=synthesize,
+        extra_injections=extra, add_days=add_days,
+        gateway=Gateway(cfg, Cassette(cfg.cassette_path)) if scenes else None,
+        scenes_k=k, scene_gate_mode=cfg.scene_gate_mode,
+    )
+    console.print(f"branch: {res.events} events over {res.days} days ({res.injections} injections)")
+
+    names = {p.id: p.name for p in people.values()}
+    a, b = EventLog(source), EventLog(res.db_path)
+    rep = diff_logs(a, b, names)
+    a.close(), b.close()
+    console.rule("[bold]what changed")
+    for line in rep.headline:
+        console.print(f"  • {line}")
+    console.print(f"\n[dim]full diff: punesim diff {source} {res.db_path}[/dim]")
+
+
+@app.command()
+def diff(
+    a: str = typer.Argument(help="event log A (source)"),
+    b: str = typer.Argument(help="event log B (branch)"),
+    seed: int = typer.Option(None),
+    households: int = typer.Option(80),
+) -> None:
+    """Compare two timelines: first divergence, changed lives, deltas."""
+    from rich.console import Console
+
+    from punesim import branch as branch_mod
+    from punesim import config
+    from punesim.kernel.diff import diff_logs
+    from punesim.kernel.log import EventLog
+    from punesim.population import synthesize
+    from punesim.world.block import Block
+
+    console = Console()
+    cfg = config.from_env()
+    log_a, log_b = EventLog(a), EventLog(b)
+    meta = branch_mod.read_meta(log_a) or {}
+    run_seed = seed if seed is not None else int(meta.get("seed", cfg.run_seed))
+    n_hh = int(meta.get("households", households))
+    block = Block.load()
+    _, people = synthesize(run_seed, block, n_households=n_hh)
+    names = {p.id: p.name for p in people.values()}
+    rep = diff_logs(log_a, log_b, names)
+    log_a.close(), log_b.close()
+
+    console.rule("[bold]headline")
+    for line in rep.headline:
+        console.print(f"  • {line}")
+    if rep.identical:
+        return
+    fd = rep.first_divergence
+    console.rule("first divergence")
+    console.print(f"  day {fd['day']}, {fd['hm']}")
+    console.print(f"  A: {fd['a']}")
+    console.print(f"  B: {fd['b']}")
+    if rep.people_changed:
+        console.rule(f"changed lives ({len(rep.people_changed)})")
+        for pid, days in sorted(rep.people_changed.items())[:20]:
+            console.print(f"  {names.get(pid, pid):28s} days {', '.join(map(str, days))}")
+        if len(rep.people_changed) > 20:
+            console.print(f"  … and {len(rep.people_changed) - 20} more")
+    if rep.type_deltas:
+        console.rule("event deltas (B − A)")
+        for t, d in rep.type_deltas.items():
+            console.print(f"  {t:26s} {'+' if d > 0 else ''}{d}")
+
+
+@app.command()
 def doctor() -> None:
     """Check environment: keys present, mode, models, cassette path."""
     from punesim import config

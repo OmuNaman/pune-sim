@@ -423,9 +423,11 @@ def _info_pass(
         # percept sources: any hazard, plus any user-injected PLACED event that
         # is not itself information — a public assassination, a procession, a
         # collapse all ripple through the same witness->gossip lane with zero
-        # event-specific code (novelty ladder, architecture §9.4)
+        # event-specific code (novelty ladder, architecture §9.4). Roots only:
+        # consequence events (ambulance, admission) carry caused_by and must
+        # not seed their own claims.
         is_hazard = e.type.startswith("hazard.")
-        is_public = e.provenance == "user" and not e.type.startswith("info.")
+        is_public = e.provenance == "user" and e.caused_by is None and not e.type.startswith("info.")
         if not (is_hazard or is_public) or not e.payload.get("place"):
             continue
         cls = by_type.get(e.type)
@@ -513,6 +515,13 @@ def run_simulation(
         if f is not None and p.age >= 18:
             state.pressures[p.id] = {"p_health": 0.1, "p_financial": proc_mod.p_financial(f)}
     total = 0
+    if start_day == 0:  # self-describing log: a db alone is enough to branch it
+        log.commit([EventIn(
+            type="run.meta", sim_time=0,
+            payload={"seed": run_seed, "households": len(households), "days": days},
+            provenance="system",
+        )])
+        total += 1
     hh_of_person = {p.id: p.household_id for p in people.values()}
     hh_by_id = {h.id: h for h in households}
     hh_members = {h.id: h.member_ids for h in households}
