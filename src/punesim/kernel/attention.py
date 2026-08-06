@@ -1,9 +1,18 @@
 """Law 5: one attention/budget authority.
 
-score(entity) = user_focus + recent_perturbation (exponentially decayed).
-Tier assignment anywhere in the sim is a pure function of this score — no other
-gate exists. V0 uses top-k selection for morning scenes; arc_activity and
-event_proximity terms join at V1+ per the architecture.
+score(entity) = user_focus + recent_perturbation (exponentially decayed)
+                + staleness (days since last rendered, capped).
+Tier assignment anywhere in the sim is a pure function of this field — no other
+gate exists — but it is NOT a pure function of score() alone: top_k sorts on
+(focus, score, id), so an explicitly followed entity is lexicographically
+dominant and cannot be outbid by drama elsewhere.
+
+The staleness term is load-bearing, not a nicety. Without it the ranking is
+frozen the moment perturbations stop arriving: uniform exponential decay is
+order-preserving, so a quiet block keeps exactly the same top-k forever, and an
+entity that was never perturbed sits at exactly 0.0 and can never enter at all.
+V0 uses top-k selection for morning scenes; arc_activity and event_proximity
+terms join at V1+ per the architecture.
 
 The scene gate mode lives beside it: "spotlight" renders top-k households,
 "all" renders every household (the owner's LLM-for-everyone dial — same

@@ -43,15 +43,17 @@ THREE RULES THAT OVERRIDE EVERYTHING ELSE:
 1. PEOPLE ARE FIXED. Every person is given to you as "Name (age, occupation) [id]". Never invent
    a name, age, relationship or job for anyone, and never rename someone you were given. If a
    line mentions a six-year-old pupil, they are a six-year-old pupil — not a colleague, not an
-   aunt. If you need someone who was not given to you, refer to them vaguely ("a neighbour",
-   "someone at the market") and never give them an id.
+   aunt. Nobody in the room is anyone but the people on the card: do not have a child call out
+   to a grandmother or an uncle who is not listed. If you need someone who was not given to
+   you, refer to them vaguely ("a neighbour", "someone at the market") and never give them an id.
 2. TIME IS FIXED. Every line carries the exact date, time, and how long ago it was. Say "yesterday"
    only for something marked (yesterday), and never move an event to a different time of day than
    the one shown. If someone SAW IT HAPPEN, they saw it at the stated hour — they cannot
    misremember it as happening at night.
-3. MEMORY IS BACKGROUND. The "WHAT THEY ALREADY CARRY" lines are what these people already know
-   from earlier days. Never restate one as something that happened today, and never write a
-   memory_write that repeats one. New memory_writes are for what happens in THIS scene."""
+3. EVERY MORNING IS ITS OWN MORNING. The "EARLIER MORNINGS" lines are scenes already written.
+   Never restate one as if it happened today, never write a memory_write that repeats one, and
+   do not run the same small beat again — if a boy lost his notebook yesterday, today is about
+   something else. Real households repeat their routines but not their incidents."""
 
 REACTION_TASK = """It is {now} — the household has JUST learned of the most recent events above.
 Write their immediate reaction — who calls whom, who rushes where, what they decide right now.
@@ -97,6 +99,19 @@ def _who(pid: str, people: dict[str, Person] | None, block: Block) -> str:
     return pid or "?"
 
 
+def _flatten(s: str) -> str:
+    return " ".join((s or "").lower().split())
+
+
+def held_memories(log: EventLog, member_ids: set[str], until: int | None = None) -> set[tuple[str, str]]:
+    """(person, normalized summary) of everything they already remember."""
+    return {
+        (e.payload.get("person", ""), _flatten(e.payload.get("summary", "")))
+        for e in log.events(type="memory.formed")
+        if e.payload.get("person") in member_ids and (until is None or e.sim_time < until)
+    }
+
+
 def _when(t: int, day: int) -> str:
     """Absolute date plus how long ago. The soak's d6 scene called a fire from
     five days earlier "yesterday" — which was the literal reading of a context
@@ -119,8 +134,14 @@ def _humanize(
         return _who(pid, people, block)
 
     def pname(pid: str) -> str:
-        p = block.get(pid) if pid else None
-        return f"{p.name} [{pid}]" if p and p.name else (pid or "?")
+        # Some payloads carry an unprefixed ref (plan.step_dropped writes the
+        # bare OSM id), and an unresolved bare id in a prompt is exactly the
+        # invitation _who exists to remove.
+        for cand in (pid, f"place:{pid}", f"home:{pid}"):
+            p = block.get(cand) if cand else None
+            if p is not None and p.name:
+                return f"{p.name} [{cand}]"
+        return pid or "?"
 
     if e_type == "message.sent":
         rec = ", ".join(who(r) for r in payload.get("recipients", []) or [])
@@ -184,6 +205,8 @@ def _humanize(
         return f"a municipal water tanker reached {pname(payload.get('place', ''))} ({payload.get('loads', 1)} load(s))"
     if e_type == "utility.restored":
         return f"{payload.get('utility', 'supply')} came back around {pname(payload.get('place', ''))}"
+    if e_type == "fact.established":
+        return f"it is now known that {who(payload.get('subject', ''))} {payload.get('predicate', '')}: {payload.get('value', '')}"
     if e_type == "fir.update":
         return f"police update on the case: {payload.get('status', '')}"
     if e_type == "crowd.gathered":
@@ -198,7 +221,10 @@ def _humanize(
     if e_type.startswith("unrest."):
         return f"trouble broke out near {pname(payload.get('place', ''))} — the lanes have gone tense"
     if e_type.startswith("info."):  # an injected rumour reaching the street
-        return f"word is going round about {pname(payload.get('place', ''))}"
+        text = (payload.get("claim") or {}).get("text") or ""
+        told = ", ".join(who(p) for p in payload.get("participants", []) or [])
+        head = f'word is going round: "{text}"' if text else "word is going round"
+        return head + (f" — {told} heard it first" if told else "")
     if e_type.startswith("hazard."):
         kind = e_type.split(".", 1)[1].replace(".", " ").replace("_", " ")
         hurt = ", ".join(who(p) for p in payload.get("participants", []) or [])
@@ -366,7 +392,10 @@ def build_messages(
         lines.extend(witnessed)
         lines.append("")
     if memories:
-        lines.append("WHAT THEY ALREADY CARRY (background — do not re-tell as if it were new):")
+        lines.append(
+            "EARLIER MORNINGS (already written — today must be a DIFFERENT morning; "
+            "do not replay these beats or restate them as new):"
+        )
         lines.extend(memories)
         lines.append("")
     if recent:
@@ -398,7 +427,10 @@ def build_reaction_messages(
         lines.extend(witnessed)
         lines.append("")
     if memories:
-        lines.append("WHAT THEY ALREADY CARRY (background — do not re-tell as if it were new):")
+        lines.append(
+            "EARLIER MORNINGS (already written — today must be a DIFFERENT morning; "
+            "do not replay these beats or restate them as new):"
+        )
         lines.extend(memories)
         lines.append("")
     lines.append("EVENTS (yesterday and TODAY so far):")
@@ -422,6 +454,7 @@ def apply_delta(
     disclosure_tier: int = 0,
     event_type: str = "scene.morning",
     people: dict[str, Person] | None = None,
+    prior_memories: set[str] | None = None,
 ) -> int:
     """Commit the scene and its consequences; returns the scene event seq."""
     # Referential integrity at the gate. Nothing validated the person ids a
@@ -430,6 +463,7 @@ def apply_delta(
     # people who do not exist. A dangling id is dropped and recorded, never
     # committed: the registry is canon, and a scene does not get to extend it.
     dropped: list[str] = []
+    repeated: list[str] = []
 
     def known(pid: str | None) -> bool:
         if people is None or not pid:
@@ -456,8 +490,15 @@ def apply_delta(
     )[0]
 
     batch: list[EventIn] = []
+    already = prior_memories or set()
     for m in delta.memory_writes:
         if not known(m.person_id):
+            continue
+        # A memory already held is not a new memory. The prompt asks for this
+        # and the model mostly complies, but a life made of the same three
+        # remembered incidents is the failure mode worth a hard guarantee.
+        if (m.person_id, _flatten(m.summary)) in already:
+            repeated.append(m.person_id)
             continue
         batch.append(
             EventIn(
@@ -543,12 +584,16 @@ def apply_delta(
                 provenance="llm_scene",
             )
         )
-    if dropped:
+    if dropped or repeated:
         batch.append(
             EventIn(
                 type="scene.invalid_ref",
                 sim_time=sim_time,
-                payload={"household": household_id, "ids": sorted(set(dropped))},
+                payload={
+                    "household": household_id,
+                    "ids": sorted(set(dropped)),
+                    "repeat_memories": sorted(set(repeated)),
+                },
                 caused_by=scene_seq,
                 provenance="system",
             )
@@ -626,7 +671,7 @@ def run_morning_scenes(
             continue
         seq = apply_delta(
             log, canon, registry, res.parsed, household_id=hid, sim_time=sim_time,
-            people=people,
+            people=people, prior_memories=held_memories(log, members, until=sim_time),
         )
         results.append(SceneResult(household_id=hid, delta=res.parsed, scene_seq=seq))
     return results
@@ -658,6 +703,6 @@ def run_reaction_scene(
     seq = apply_delta(
         log, canon, registry, res.parsed,
         household_id=household.id, sim_time=now_abs, event_type="scene.reaction",
-        people=people,
+        people=people, prior_memories=held_memories(log, members, until=now_abs),
     )
     return SceneResult(household_id=household.id, delta=res.parsed, scene_seq=seq)

@@ -28,7 +28,7 @@ def run(
     k: int = typer.Option(5, help="Households per morning under the spotlight gate"),
     inject: str = typer.Option(None, help="JSON file of injections [{day,time,type,place,participants,severity}]"),
     hazards: bool = typer.Option(True, "--hazards/--no-hazards", help="Sample random hazards (V1 un-injected ripples)"),
-    follow: list[str] = typer.Option(None, "--follow", help="Household or person id to render every day (repeatable)"),
+    follow: list[str] = typer.Option(None, "--follow", help="Household or person id rendered every day, ADDITIVE to k (repeatable; raises cost and narrows coverage of everyone else)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path

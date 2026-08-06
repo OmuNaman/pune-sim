@@ -234,7 +234,7 @@ def test_a_scene_is_never_shown_its_own_previous_output(tmp_path, world):
     assert "scene.morning" not in day2 and "plan.revised" not in day2
     # ...but it IS carried deliberately, as dated background
     assert "A very memorable Tuesday thing." in day2
-    assert "WHAT THEY ALREADY CARRY" in day2
+    assert "EARLIER MORNINGS" in day2
 
 
 def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world):
