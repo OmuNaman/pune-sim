@@ -107,6 +107,14 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
         return f"Police: {p.get('status', '')} ({nm(p.get('victim'))}'s case)"
     if t == "scene.skipped":
         return f"(scene skipped for {p.get('household')}: {p.get('reason', '')[:60]})"
+    if t == "crowd.gathered":
+        return f"A crowd of ~{p.get('size', '?')} gathers at {nm(p.get('place'))}"
+    if t == "police.deployed":
+        return f"Police deployed at {nm(p.get('place'))} (crowd of {p.get('crowd_size', '?')})"
+    if t == "curfew.imposed":
+        return f"Curfew imposed around {nm(p.get('place'))} until day {p.get('until_day', '?')}"
+    if t.startswith("unrest."):
+        return f"Unrest near {nm(p.get('place'))} — {t.split('.', 1)[1].replace('_', ' ')}"
     if t == "hazard.water.supply_cut":
         return f"Water supply cut around {nm(p.get('place'))}"
     if t == "hazard.power.outage":

@@ -108,6 +108,17 @@ def _humanize(e_type: str, payload: dict, block: Block) -> str:
         )
     if e_type == "fir.update":
         return f"police update on the case: {payload.get('status', '')}"
+    if e_type == "crowd.gathered":
+        return f"a crowd of about {payload.get('size', '?')} gathered at {pname(payload.get('place', ''))}"
+    if e_type == "police.deployed":
+        return f"police reached {pname(payload.get('place', ''))} to disperse the crowd"
+    if e_type == "curfew.imposed":
+        return (
+            f"a curfew was imposed around {pname(payload.get('place', ''))} from day"
+            f" {payload.get('from_day', '?')} — people are told to stay indoors"
+        )
+    if e_type.startswith("unrest."):
+        return f"trouble broke out near {pname(payload.get('place', ''))} — the lanes have gone tense"
     return f"{e_type}: { {k: v for k, v in payload.items() if k != 'wall'} }"
 
 

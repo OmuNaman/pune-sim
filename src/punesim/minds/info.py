@@ -116,6 +116,8 @@ _PREDICATE_PHRASE = {
     "outage": "power has gone out around {subject}",
     "fire": "a fire broke out at {subject}",
     "adulterated": "the food at {subject} is adulterated",
+    "communal_tension": "there was trouble near {subject} — the air has turned tense, people say stay away",
+    "clash": "there was a clash near {subject}",
 }
 
 

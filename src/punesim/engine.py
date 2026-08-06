@@ -26,6 +26,7 @@ from .llm.gateway import CassetteMiss, Gateway
 from .minds import info as info_mod
 from .population.synth import Household, Person
 from .world import hazards as hazards_mod
+from .world import unrest as unrest_mod
 from .world.block import Block
 from .world.schedule import TimedEvent, day_events
 
@@ -236,6 +237,78 @@ class SimState:
     gate_marks: dict = field(default_factory=dict)  # household -> reason for tomorrow's scene
     proc: proc_mod.ProcState = field(default_factory=proc_mod.ProcState)  # V2 institutions
     pending: dict = field(default_factory=dict)  # future_day -> [TimedEvent] (procedure futures)
+    unrest: unrest_mod.UnrestState = field(default_factory=unrest_mod.UnrestState)
+
+
+def _apply_zones(
+    block: Block, timed: list[_Timed], people: dict[str, Person], state: SimState,
+    day: int, skip: set[str],
+) -> list[_Timed]:
+    """Active fear/curfew zones keep households home — the shelter side of
+    collective dynamics. Essential occupations keep moving; scene plans win."""
+    shelters = unrest_mod.zone_shelters(state.unrest, day, block, people)
+    shelters = {pid: z for pid, z in shelters.items() if pid not in skip}
+    if not shelters:
+        return timed
+    base = day * SECONDS_PER_DAY
+    timed = [x for x in timed if not (x[1] in shelters and x[4] == "clockwork")]
+    for pid in sorted(shelters):
+        te = TimedEvent(base + 8 * 3600, "activity.start",
+                        {"person": pid, "at": people[pid].home_id,
+                         "activity": "shelters_at_home", "zone": shelters[pid]})
+        timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    return timed
+
+
+def _unrest_response(
+    log: EventLog,
+    state: SimState,
+    run_seed: int,
+    block: Block,
+    people: dict[str, Person],
+    hh_of_person: dict[str, str],
+    inj: Injection,
+    day: int,
+    t_abs: int,
+    inj_seq: int,
+    intervals: dict,
+    extra: list[TimedEvent],
+) -> int:
+    """The minimal collective-dynamics instance: threshold mobilization,
+    scripted police, a curfew zone. Percepts and gossip about the flashpoint
+    flow through the ordinary INFO lane — no riot-specific spread code."""
+    severity = float(inj.severity or 0.5)
+    crowd = unrest_mod.mobilize(
+        run_seed, inj.place or "", t_abs, severity, block, people, intervals
+    ) if inj.place else []
+    n = 0
+    if crowd:
+        extra.append(TimedEvent(
+            t_abs + 45 * 60, "crowd.gathered",
+            {"place": inj.place, "participants": crowd, "size": len(crowd)}, inj_seq,
+        ))
+        for pid in crowd:
+            hid = hh_of_person.get(pid)
+            if hid:
+                state.gate_marks[hid] = "unrest"
+                state.attention.bump(hid, 2.0, tick=day * 288)
+    if inj.place and (
+        len(crowd) >= unrest_mod.CROWD_FOR_POLICE or severity >= unrest_mod.CURFEW_SEVERITY
+    ):  # a curfew without police is a suggestion
+        extra.append(TimedEvent(
+            t_abs + 75 * 60, "police.deployed",
+            {"place": inj.place, "crowd_size": len(crowd)}, inj_seq,
+        ))
+    if severity >= unrest_mod.CURFEW_SEVERITY and inj.place:
+        shelter_days = 1 + int(severity * 2)
+        until = day + 1 + shelter_days
+        state.unrest.zones.append(unrest_mod.Zone(inj.place, until, severity))
+        extra.append(TimedEvent(
+            t_abs + 3 * 3600, "curfew.imposed",
+            {"place": inj.place, "from_day": day + 1, "until_day": until,
+             "radius_m": unrest_mod.ZONE_RADIUS_M}, inj_seq,
+        ))
+    return n
 
 
 def _apply_stays(
@@ -549,10 +622,18 @@ def run_simulation(
             total += len(results)
         state.gate_marks.clear()
 
-        # 2. compile the day (scene plans win; beliefs and bodies bend the rest)
+        # 2. compile the day (scene plans win; beliefs, bodies and fear zones
+        #    bend the rest)
         timed = _compile_day(run_seed, block, people, day, overrides)
         timed = _apply_beliefs(timed, people, state, day, skip=set(overrides))
         timed = _apply_stays(timed, people, state, day, skip=set(overrides))
+        timed = _apply_zones(block, timed, people, state, day, skip=set(overrides))
+        pre_routine = [
+            (t, pid, ty, te.payload)
+            for (t, pid, ty, te, prov) in timed
+            if prov == "clockwork" and ty in _ROUTINE_TYPES
+        ]
+        pre_intervals = info_mod.presence_intervals(pre_routine, people, day)
 
         # 3. injections (committed now, AFTER morning scenes — a 06:30 scene
         #    must not see a 07:20 event) + stub reactions + reaction triggers
@@ -582,6 +663,12 @@ def run_simulation(
             if inj.type.startswith("info."):
                 total += _seed_rumor(log, state, run_seed, block, inj, day, t_abs, inj_seq)
                 continue  # a rumor propagates through the INFO lane, not sirens
+            if inj.type.startswith("unrest."):
+                total += _unrest_response(
+                    log, state, run_seed, block, people, hh_of_person,
+                    inj, day, t_abs, inj_seq, pre_intervals, extra,
+                )
+                continue  # collective dynamics, not an ambulance
             extra.extend(stub_institution_reactions(inj, t_abs, block, people, caused_by=inj_seq))
             for pid in inj.participants:
                 hid = hh_of_person.get(pid)
@@ -593,12 +680,6 @@ def run_simulation(
 
         # 4. un-injected trouble: sampled hazards ride the same machinery (E7)
         if hazards:
-            pre_routine = [
-                (t, pid, ty, te.payload)
-                for (t, pid, ty, te, prov) in timed
-                if prov == "clockwork" and ty in _ROUTINE_TYPES
-            ]
-            pre_intervals = info_mod.presence_intervals(pre_routine, people, day)
             for hz in hazards_mod.sample_day(run_seed, day, block, people, pre_intervals):
                 hz_seq = log.commit(
                     [

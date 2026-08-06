@@ -58,6 +58,8 @@ const KIND_COLOR = {
   "hospital.discharged": "var(--danger)", "money.paid": "var(--mood)",
   "loan.taken": "var(--mood)", "loan.interest": "var(--mood)",
   "police.fir.registered": "var(--phone)", "fir.update": "var(--phone)",
+  "crowd.gathered": "var(--danger)", "police.deployed": "var(--phone)",
+  "curfew.imposed": "var(--danger)", "unrest.communal_tension": "var(--danger)",
 };
 
 /* Linkify known person names inside humanized sentences. */
