@@ -217,7 +217,10 @@ def serve(
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
-    application = create_app(db, run_seed, n_households=households)
+    application = create_app(
+        db, run_seed, n_households=households,
+        cfg=cfg if cfg.openrouter_api_key else None,
+    )
     typer.echo(f"Pune Sim viewer -> http://127.0.0.1:{port}  (log: {db}, seed: {run_seed})")
     uvicorn.run(application, host="127.0.0.1", port=port, log_level="warning")
 

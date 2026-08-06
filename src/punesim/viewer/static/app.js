@@ -88,6 +88,7 @@ async function boot() {
   renderTicker();
   renderScenesPanel();
   renderRumorsPanel();
+  renderInjectPanel();
   wireControls();
   updateClock();
   refreshPositions();
@@ -365,18 +366,29 @@ async function selectPerson(pid) {
         </div>`).join("")}</div>
     </details>` : ""}
 
-    ${d.interviews.length ? `
-    <details open><summary>Interviews (${d.interviews.length})</summary>
+    <details ${d.interviews.length || state.meta.llm ? "open" : ""}><summary>Interviews (${d.interviews.length})</summary>
       <div class="body">${d.interviews.map((iv) => `
         <div class="qa">
           <div class="q">“${esc(iv.question)}” <span style="color:var(--fg-faint)">— a journalist, ${esc(iv.hm)}</span></div>
           <div class="a">${esc(iv.answer)}</div>
-        </div>`).join("")}</div>
-    </details>` : ""}
+        </div>`).join("")}
+        ${state.meta.llm ? `
+        <div class="askrow">
+          <input id="ask-input" type="text" placeholder="ask ${esc(d.name.split(" ")[0])} something…">
+          <button id="ask-go" class="primary">Ask</button>
+        </div>
+        <div id="ask-status" class="formhint"></div>` : ""}
+      </div>
+    </details>
 
     <details><summary>Raw dossier</summary><div class="body raw">${esc(JSON.stringify(
       { id: d.id, religion: d.religion, home: d.home, work: d.work }, null, 1))}</div></details>
   `;
+  const askBtn = $("#ask-go");
+  if (askBtn) {
+    askBtn.onclick = () => askPerson(d.id);
+    $("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter") askPerson(d.id); });
+  }
 }
 
 /* ---------- inspector: scenes ---------- */
@@ -461,6 +473,80 @@ function renderRumorsPanel() {
   }).join("") || '<p class="hint">no rumors yet — inject one (type "info.rumor") or let a hazard start one</p>';
 }
 
+/* ---------- inspector: inject ---------- */
+function renderInjectPanel() {
+  if (!state.meta.llm) {
+    $("#panel-inject").innerHTML =
+      '<p class="hint">No LLM key configured — restart <code>punesim serve</code> with a .env key to compile injections.</p>';
+    return;
+  }
+  $("#panel-inject").innerHTML = `
+    <div class="injectform">
+      <p class="formhint">Describe anything. It compiles into a grounded event — real places,
+      real residents, validated before it can touch the world.</p>
+      <textarea id="inj-text" rows="4" placeholder="e.g. the city DM was killed in broad daylight near Shaniwar Wada at noon on day 2&#10;e.g. a rumor spreads that the mandal treasurer stole two lakh rupees"></textarea>
+      <div class="formrow">
+        <label>default day <input id="inj-day" type="number" min="0" value="0"></label>
+        <button id="inj-go" class="primary">Compile</button>
+      </div>
+      <div id="inj-result"></div>
+    </div>`;
+  $("#inj-go").onclick = async () => {
+    const text = $("#inj-text").value.trim();
+    if (!text) return;
+    const res = $("#inj-result");
+    res.innerHTML = '<p class="hint">compiling against the world card…</p>';
+    $("#inj-go").disabled = true;
+    try {
+      const r = await fetch("/api/compile", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, day: Number($("#inj-day").value) || 0 }),
+      }).then((x) => x.json());
+      if (r.error) {
+        res.innerHTML = `<div class="compileerr">✗ ${esc(r.error)}${
+          (r.details || []).map((d) => `<div>- ${esc(d)}</div>`).join("")}</div>`;
+      } else {
+        res.innerHTML = `
+          <div class="compiled">
+            <div class="drift-title">Compiled &amp; validated</div>
+            <pre class="preview">${esc(r.preview)}</pre>
+            <div class="drift-title">Saved to ${esc(r.saved)} (${r.count} injection${r.count > 1 ? "s" : ""}) — run it:</div>
+            <pre class="runcmd" title="click to copy">${esc(r.run_cmd)}</pre>
+            <p class="formhint">Injections belong to runs: this never rewrites the log you are viewing.
+            Run the command in a terminal, then serve the new db to watch it play out.</p>
+          </div>`;
+        res.querySelector(".runcmd").onclick = (ev) =>
+          navigator.clipboard?.writeText(ev.target.textContent).then(() => {
+            ev.target.classList.add("copied"); setTimeout(() => ev.target.classList.remove("copied"), 900);
+          });
+      }
+    } catch (e) {
+      res.innerHTML = `<div class="compileerr">✗ ${esc(String(e))}</div>`;
+    }
+    $("#inj-go").disabled = false;
+  };
+}
+
+/* ---------- ask-them-something ---------- */
+async function askPerson(pid) {
+  const input = $("#ask-input");
+  const q = input.value.trim();
+  if (!q) return;
+  const btn = $("#ask-go");
+  btn.disabled = true; btn.textContent = "…";
+  const box = $("#ask-status");
+  box.textContent = "the clock pauses; they consider the question…";
+  try {
+    const r = await fetch("/api/interview", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ person_id: pid, question: q }),
+    }).then((x) => x.json());
+    if (r.error) { box.textContent = "✗ " + r.error; }
+    else { await selectPerson(pid); return; }   // dossier re-renders with the new Q/A
+  } catch (e) { box.textContent = "✗ " + e; }
+  btn.disabled = false; btn.textContent = "Ask";
+}
+
 /* ---------- controls ---------- */
 function updateClock() {
   $("#clock").textContent = hm(state.t);
@@ -511,13 +597,15 @@ function wireControls() {
         x.classList.toggle("active", x.id === `panel-${tab.dataset.tab}`));
       if (tab.dataset.tab === "scenes") history.replaceState(null, "", "#scenes");
       if (tab.dataset.tab === "rumors") history.replaceState(null, "", "#rumors");
+      if (tab.dataset.tab === "inject") history.replaceState(null, "", "#inject");
     }
   });
   addEventListener("resize", drawTimeline);
-  // deep links: #person:000.1 opens a dossier, #scenes / #rumors open readers
+  // deep links: #person:000.1 opens a dossier, #scenes / #rumors / #inject open panels
   const h = decodeURIComponent(location.hash.slice(1));
   if (h === "scenes") document.querySelector('[data-tab="scenes"]').click();
   else if (h === "rumors") document.querySelector('[data-tab="rumors"]').click();
+  else if (h === "inject") document.querySelector('[data-tab="inject"]').click();
   else if (h.startsWith("person:")) selectPerson(h);
 }
 

@@ -1,0 +1,11 @@
+[
+  {
+    "day": 2,
+    "time": "12:00",
+    "type": "hazard.violence.attack",
+    "place": "place:node/3337848241",
+    "participants": [],
+    "severity": 0.8,
+    "payload": {}
+  }
+]

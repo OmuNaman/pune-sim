@@ -1,17 +1,26 @@
-"""V0 map viewer backend: a read-only FastAPI over the event log.
+"""V2 map viewer backend: FastAPI over the event log.
 
-Everything is a projection: people and places are re-synthesized from the seed
-(D0 is a pure function), positions are inferred from trip/activity events, and
-the god's-eye panels (timeline, scenes, memories) are folds over the log. The
-operator sees full canon — disclosure tiers govern prompts, not this UI.
+Read side: everything is a projection — people and places re-synthesized from
+the seed (D0 is a pure function), positions inferred from trip/activity
+events, panels folded from the log. The operator sees full canon.
+
+Write side (V2): two carefully-scoped doors. /api/interview runs the premium
+time-bubble against the SAME db (the conversation becomes canon, like the
+CLI), and /api/compile turns free operator text into a grounded, validated
+injection saved as a runnable scenario — it never mutates the current log,
+because injections belong to runs, not to finished histories. After any
+write, the snapshot is rebuilt so the UI sees it immediately; /api/reload
+does the same for a db that is still being written by a live run.
 """
 
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 import orjson
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, ORJSONResponse
+from pydantic import BaseModel
 
 from ..kernel.log import EventLog
 from ..kernel.timebase import SECONDS_PER_DAY, to_datetime
@@ -99,82 +108,116 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
     return f"{t}: {orjson.dumps(p).decode()[:120]}"
 
 
-def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
-    block = Block.load()
-    households, people = synthesize(seed, block, n_households=n_households)
-    log = EventLog(db_path)
+class _Snapshot:
+    """Everything derived from the log at one moment; rebuilt after writes."""
 
-    place_names = {p.id: (p.name or p.kind) for p in [*block.places, *block.homes]}
-    person_names = {p.id: p.name for p in people.values()}
-    hh_members = {h.id: list(h.member_ids) for h in households}
+    def __init__(self, db_path: str, block: Block, people: dict):
+        self.block = block
+        self.people = people
+        log = EventLog(db_path)
+        self.events = list(log.events())
+        self.det_hash = log.determinism_hash()
+        log.close()
 
-    # --- position segments per person (built once; log is immutable) --------
-    segs: dict[str, list[_Seg]] = {pid: [] for pid in people}
-    cur: dict[str, tuple[str, str | None]] = {pid: (p.home_id, None) for pid, p in people.items()}
-    open_t: dict[str, int] = dict.fromkeys(people, 0)
-    max_t = 0
-    events_cache = list(log.events())
-    det_hash = log.determinism_hash()
-    log.close()  # immutable snapshot view; no connection crosses threads
-    for e in events_cache:
-        max_t = max(max_t, e.sim_time)
-        pid = e.payload.get("person")
-        if pid not in segs or e.type not in _ROUTINE:
-            continue
-        if e.type == "trip.start":
-            at, act = cur[pid]
-            segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
-            cur[pid] = (e.payload["to"], e.payload.get("purpose"))
-            segs[pid].append(_Seg(e.sim_time, -1, "transit", e.payload["from"], e.payload["to"], e.payload.get("purpose")))
-            open_t[pid] = e.sim_time
-        elif e.type == "trip.end":
-            if segs[pid] and segs[pid][-1].kind == "transit" and segs[pid][-1].t1 == -1:
-                segs[pid][-1].t1 = e.sim_time
-            cur[pid] = (e.payload["at"], cur[pid][1])
-            open_t[pid] = e.sim_time
-        elif e.type == "activity.start":
-            at, act = cur[pid]
-            if e.sim_time > open_t[pid]:  # close the labelled span so activities never bleed backward
-                segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
+        self.segs: dict[str, list[_Seg]] = {pid: [] for pid in people}
+        cur: dict[str, tuple[str, str | None]] = {pid: (p.home_id, None) for pid, p in people.items()}
+        open_t: dict[str, int] = dict.fromkeys(people, 0)
+        self.max_t = 0
+        for e in self.events:
+            self.max_t = max(self.max_t, e.sim_time)
+            pid = e.payload.get("person")
+            if pid not in self.segs or e.type not in _ROUTINE:
+                continue
+            if e.type == "trip.start":
+                at, act = cur[pid]
+                self.segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
+                cur[pid] = (e.payload["to"], e.payload.get("purpose"))
+                self.segs[pid].append(_Seg(e.sim_time, -1, "transit", e.payload["from"], e.payload["to"], e.payload.get("purpose")))
                 open_t[pid] = e.sim_time
-            cur[pid] = (e.payload.get("at", at), e.payload.get("activity"))
-    for pid, (at, act) in cur.items():
-        segs[pid].append(_Seg(open_t[pid], max_t + SECONDS_PER_DAY, "at", at, None, act))
+            elif e.type == "trip.end":
+                if self.segs[pid] and self.segs[pid][-1].kind == "transit" and self.segs[pid][-1].t1 == -1:
+                    self.segs[pid][-1].t1 = e.sim_time
+                cur[pid] = (e.payload["at"], cur[pid][1])
+                open_t[pid] = e.sim_time
+            elif e.type == "activity.start":
+                at, act = cur[pid]
+                if e.sim_time > open_t[pid]:  # close the labelled span so activities never bleed backward
+                    self.segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
+                    open_t[pid] = e.sim_time
+                cur[pid] = (e.payload.get("at", at), e.payload.get("activity"))
+        for pid, (at, act) in cur.items():
+            self.segs[pid].append(_Seg(open_t[pid], self.max_t + SECONDS_PER_DAY, "at", at, None, act))
 
-    def _pos(pid: str, t: int):
-        p = people[pid]
+    def pos(self, pid: str, t: int):
+        p = self.people[pid]
         best = None
-        for s in segs[pid]:
+        for s in self.segs[pid]:
             if s.t0 <= t and (s.t1 == -1 or t < s.t1):
                 best = s
         if best is None:
             best = _Seg(0, 0, "at", p.home_id, None, None)
         if best.kind == "at" or best.b is None:
-            pl = block.get(best.a)
+            pl = self.block.get(best.a)
             return (pl.lat, pl.lon, "at", best.a, best.activity) if pl else None
-        a, b = block.get(best.a), block.get(best.b)
+        a, b = self.block.get(best.a), self.block.get(best.b)
         if not a or not b:
             return None
         frac = (t - best.t0) / max(1, (best.t1 if best.t1 > 0 else best.t0 + 600) - best.t0)
         frac = min(max(frac, 0.0), 1.0)
         return (a.lat + (b.lat - a.lat) * frac, a.lon + (b.lon - a.lon) * frac, "transit", best.b, best.activity)
 
+
+class InterviewBody(BaseModel):
+    person_id: str
+    question: str
+    ghost: bool = False
+
+
+class CompileBody(BaseModel):
+    text: str
+    day: int = 0
+
+
+def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> FastAPI:
+    block = Block.load()
+    households, people = synthesize(seed, block, n_households=n_households)
+
+    place_names = {p.id: (p.name or p.kind) for p in [*block.places, *block.homes]}
+    person_names = {p.id: p.name for p in people.values()}
+    hh_members = {h.id: list(h.member_ids) for h in households}
+
+    S = {"snap": _Snapshot(db_path, block, people)}
+    write_lock = threading.Lock()
+
+    def _gateway(log=None):
+        from ..llm import Cassette, Gateway
+
+        return Gateway(cfg, Cassette(cfg.cassette_path), log=log)
+
     app = FastAPI(default_response_class=ORJSONResponse)
 
     @app.get("/api/meta")
     def meta():
+        snap = S["snap"]
         lats = [p.lat for p in block.places]
         lons = [p.lon for p in block.places]
         return {
             "seed": seed,
             "people": len(people),
             "households": len(households),
-            "events": len(events_cache),
-            "days": max_t // SECONDS_PER_DAY + 1,
-            "max_t": max_t,
-            "hash": det_hash[:16],
+            "events": len(snap.events),
+            "days": snap.max_t // SECONDS_PER_DAY + 1,
+            "max_t": snap.max_t,
+            "hash": snap.det_hash[:16],
+            "llm": cfg is not None,
             "bounds": [[min(lats), min(lons)], [max(lats), max(lons)]],
         }
+
+    @app.post("/api/reload")
+    def reload():
+        with write_lock:
+            S["snap"] = _Snapshot(db_path, block, people)
+        return {"events": len(S["snap"].events)}
 
     @app.get("/api/places")
     def places():
@@ -197,11 +240,12 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
 
     @app.get("/api/person/{pid}")
     def person(pid: str):
+        snap = S["snap"]
         p = people.get(pid)
         if p is None:
             return {"error": "unknown person"}
         memories, moods, lines, interviews, heard = [], [], [], [], []
-        for e in events_cache:
+        for e in snap.events:
             pl = e.payload
             if e.type == "info.heard" and pl.get("person") == pid:
                 c = pl.get("claim", {})
@@ -249,7 +293,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
     @app.get("/api/scenes")
     def scenes():
         out = []
-        for e in events_cache:
+        for e in S["snap"].events:
             if e.type in ("scene.morning", "scene.reaction"):
                 hid = e.payload.get("household")
                 out.append({
@@ -265,7 +309,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
     @app.get("/api/ticker")
     def ticker():
         out = []
-        for e in events_cache:
+        for e in S["snap"].events:
             # info.heard is high-volume gossip — it lives in the Rumors tab
             if e.type in _ROUTINE or e.type in (
                 "llm.response", "fact.established", "fact.superseded", "info.heard",
@@ -286,9 +330,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
     def rumors():
         """Claim families: origin, hop-by-hop drift, reach, believers, actions.
         The auditable telephone game — every number here folds from the log."""
-        by_seq = {e.seq: e for e in events_cache}
+        snap = S["snap"]
+        by_seq = {e.seq: e for e in snap.events}
         fams: dict[str, dict] = {}
-        for e in events_cache:
+        for e in snap.events:
             if e.type == "info.heard":
                 pl = e.payload
                 c = pl.get("claim", {})
@@ -349,9 +394,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
 
     @app.get("/api/positions")
     def positions(t: int):
+        snap = S["snap"]
         out = []
         for pid in people:
-            r = _pos(pid, t)
+            r = snap.pos(pid, t)
             if r is None:
                 continue
             lat, lon, state, at, activity = r
@@ -361,6 +407,72 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
                 "activity": activity or "",
             })
         return out
+
+    @app.post("/api/interview")
+    def interview_endpoint(body: InterviewBody):
+        """The 'Ask them something' box: premium time-bubble, becomes canon."""
+        if cfg is None:
+            return {"error": "no LLM configured — restart serve with a .env key"}
+        if body.person_id not in people:
+            return {"error": "unknown person"}
+        from ..minds.interview import interview as _interview
+
+        with write_lock:
+            log = EventLog(db_path)
+            try:
+                answer = _interview(
+                    log, _gateway(log), block, people, body.person_id,
+                    body.question, ghost=body.ghost,
+                )
+            except Exception as e:  # noqa: BLE001 — surfaced to the UI, not a 500
+                log.close()
+                return {"error": f"interview failed: {e}"}
+            log.close()
+            S["snap"] = _Snapshot(db_path, block, people)
+        return {"answer": answer, "person": person_names[body.person_id]}
+
+    @app.post("/api/compile")
+    def compile_endpoint(body: CompileBody):
+        """The Inject box: free text -> grounded preview + runnable scenario.
+        Never mutates this log — injections belong to runs (branching lands
+        next; until then the response carries the exact run command)."""
+        if cfg is None:
+            return {"error": "no LLM configured — restart serve with a .env key"}
+        from ..minds.compiler import CompileError, compile_injection
+
+        with write_lock:
+            try:
+                out = compile_injection(
+                    _gateway(), block, people, body.text, default_day=body.day
+                )
+            except CompileError as e:
+                return {"error": "could not compile", "details": e.errors}
+            except Exception as e:  # noqa: BLE001
+                return {"error": f"compile failed: {e}"}
+        inj = out.injection
+        obj = {
+            "day": inj.day,
+            "time": f"{inj.time_s // 3600:02d}:{inj.time_s % 3600 // 60:02d}",
+            "type": inj.type,
+            "place": inj.place,
+            "participants": list(inj.participants),
+            "severity": inj.severity,
+            "payload": inj.payload,
+        }
+        save = Path("runs/injections/ui_compiled.json")
+        existing = orjson.loads(save.read_bytes()) if save.exists() else []
+        existing.append(obj)
+        save.parent.mkdir(parents=True, exist_ok=True)
+        save.write_bytes(orjson.dumps(existing, option=orjson.OPT_INDENT_2))
+        return {
+            "preview": out.preview,
+            "narrative": out.spec.narrative,
+            "notes": out.spec.notes,
+            "injection": obj,
+            "saved": str(save),
+            "count": len(existing),
+            "run_cmd": f"uv run punesim run --days {max(inj.day + 2, 3)} --scenes --inject {save} --db runs/dev/events.db",
+        }
 
     @app.get("/")
     def index():
