@@ -210,6 +210,41 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   response — 09 §Build note) to de-risk tier-2 scene quality early. Exit: the
   crash yields an FIR + hospital bill that raises p_financial and triggers a
   money scene weeks later; free-text injection compiles with zero new code.
+- **V1.1 — What the 30-day soak taught (unplanned, 1 wk).** The first soak met
+  the cost exit by two orders of magnitude ($0.0017/sim-day) and the rumour
+  exit cleanly (five claim families, all rose and died, max reach 73%), and
+  **failed the continuity exit** with four contradictions on the followed
+  family. Root-causing them against the log found that three of the four shared
+  one mechanism and that the mechanical defects underneath were larger than the
+  narrative ones:
+  - **Scenes were reading their own output.** `recent_notable_events` excluded
+    only routine movement, so a scene's memories, moods, dialogue and (after
+    V2) its whole narration came back the next morning as RECENT EVENTS. 64% of
+    every context block was the household's own prior words; 53 of 118 prompts
+    were 100% self-output with zero world events. The model did the reasonable
+    thing and completed the pattern. **Rule: a generator must never be shown its
+    own output as if it were observation.** Memory is read back deliberately,
+    dated, under a header that says it is background.
+  - **Bare ids are an invitation.** Handed `person:022.4` with no name, the
+    model invented an adult colleague for a six-year-old pupil and kept her four
+    days. Every id in a prompt now arrives as "Name (age, occupation) [id]", and
+    `apply_delta` rejects references to people who do not exist — the registry
+    is canon and a scene does not get to extend it.
+  - **Uniform exponential decay is order-preserving**, so the attention field
+    froze the moment perturbations stopped: eleven days on the same five
+    households, and a family that was never bumped sat at exactly 0.0, locked
+    out forever. Attention needs a *render-feedback* term (staleness), not just
+    a decay term. Being on camera is itself an event.
+  - **Absence is observable; work is not.** Counting a workday by matching an
+    activity string was a one-way ratchet for every occupation with no fixed
+    workplace, and no whitelist can survive scene-authored free text. Detect the
+    rare, observable thing (in hospital, convalescing, sheltering) and treat
+    everything else as an ordinary day.
+  The standing consequence is a two-part gate, both scripted: `audit_run.py`
+  (27 mechanical probes, exits nonzero) and `continuity_read.py` (a judge model
+  reading a followed family against canon, citations required). Eyeball audits
+  under-count — the mechanical sweep found 11 verbatim duplications where the
+  hand-read found 1, and a defect class nobody had looked for.
 - **V3 — Real Pune data, at scale (8–12 wks).** The original M1–M6 machinery,
   built against known requirements with V0's cassette suite as the regression
   harness for *feel*: full ingest (OSM Western-Zone clip, GTFS, jurisdictions,
