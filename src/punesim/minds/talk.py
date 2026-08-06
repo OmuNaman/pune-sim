@@ -36,10 +36,14 @@ You are given both people (name, age, occupation), where they are, the time, wha
 how much the listener ended up believing it. Write what that sounded like.
 
 Rules:
-- 4 to 8 lines, speaker labels are the given names you were given, never ids.
+- AT LEAST 4 lines and at most 8, alternating; speaker labels are the given names you were
+  given, never ids. Two lines is not an exchange.
 - Marathi/Hindi/English code-mix is natural and welcome.
-- The listener's belief level is given: a 30% believer waves it off, a 90% believer is alarmed
-  and asks for details. Show it in how they answer, not by stating a percentage.
+- The listener's belief level is given, and it must be audible in their LAST line:
+    under 40% — they brush it off ("chal, afwa asel"), change the subject, or laugh;
+    40-70%  — they hedge: interested, want confirmation, will ask someone else;
+    over 70% — they take it as fact: alarmed, asking what to do, planning around it.
+  Show it; never state a percentage.
 - Never invent a third person with a name or an id, and never contradict either person's age or
   occupation. Two people met; that is all that happened.
 - Neutral voice; never attribute behaviour or traits to any community; no slurs.
@@ -48,7 +52,10 @@ Rules:
 
 Output ONLY one JSON object, no extra fields:
 {"narration": "one sentence setting the meeting",
- "transcript": "Name: line\\nName: line"}"""
+ "transcript": "Name: line\\nName: line\\nName: line\\nName: line   <- four lines MINIMUM, alternating"}
+
+A two-line transcript is a failed answer. Give them a real exchange: the news, the question back,
+the answer, and how they leave it."""
 
 
 @dataclass(frozen=True)

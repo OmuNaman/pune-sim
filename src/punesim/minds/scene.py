@@ -112,8 +112,8 @@ def held_memories(log: EventLog, member_ids: set[str], until: int | None = None)
     """(person, normalized summary) of everything they already remember."""
     return {
         (e.payload.get("person", ""), _flatten(e.payload.get("summary", "")))
-        for e in log.events(type="memory.formed")
-        if e.payload.get("person") in member_ids and (until is None or e.sim_time < until)
+        for e in log.events(type="memory.formed", until_time=until)
+        if e.payload.get("person") in member_ids
     }
 
 
@@ -260,7 +260,9 @@ def recent_notable_events(
     since = max(0, (day - 1) * SECONDS_PER_DAY)
     out: list[str] = []
     own_scenes: set[int] = set()
-    for e in log.events():
+    # Scan back far enough to see our own earlier scenes (whose seqs the
+    # lineage filter needs) without walking the whole month every render.
+    for e in log.events(since_time=max(0, since - 3 * SECONDS_PER_DAY), until_time=until):
         p = e.payload
         if e.type in ("scene.morning", "scene.reaction") and p.get("household") == household_id:
             own_scenes.add(e.seq)  # recorded before the self-output skip below
@@ -310,9 +312,7 @@ def witnessed_facts(
     # same fire produced four near-identical lines, and a prompt full of near-
     # identical lines is exactly what teaches a model to repeat itself.
     seen: dict[str, tuple[int, str, list[str]]] = {}
-    for e in log.events(type="info.heard"):
-        if until is not None and e.sim_time >= until:
-            continue
+    for e in log.events(type="info.heard", until_time=until):
         p = e.payload
         if p.get("channel") != "witness" or p.get("person") not in member_ids:
             continue
@@ -349,9 +349,7 @@ def memory_digest(
     digest for the rest of the month.
     """
     per: dict[str, list[tuple[float, int, str]]] = {}
-    for e in log.events(type="memory.formed"):
-        if until is not None and e.sim_time >= until:
-            continue
+    for e in log.events(type="memory.formed", until_time=until):
         pid = e.payload.get("person")
         if pid not in member_ids:
             continue

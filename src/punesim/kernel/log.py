@@ -138,8 +138,18 @@ class EventLog:
         )[0]
 
     def events(
-        self, *, branch_id: int = 0, type: str | None = None, since_seq: int = 0
+        self,
+        *,
+        branch_id: int = 0,
+        type: str | None = None,
+        since_seq: int = 0,
+        since_time: int | None = None,
+        until_time: int | None = None,
     ) -> Iterator[Event]:
+        """Ordered replay. The time bounds exist because scene context is built
+        several times per household per day: without them a 30-day run
+        deserializes the entire log on every scene, which is quadratic in the
+        thing that grows fastest."""
         q = (
             "SELECT seq, branch_id, sim_time, tick, type, payload, caused_by,"
             " provenance, actor_ref FROM event WHERE branch_id=? AND seq>?"
@@ -148,6 +158,12 @@ class EventLog:
         if type is not None:
             q += " AND type=?"
             args.append(type)
+        if since_time is not None:
+            q += " AND sim_time>=?"
+            args.append(since_time)
+        if until_time is not None:
+            q += " AND sim_time<?"
+            args.append(until_time)
         q += " ORDER BY seq"
         for row in self._conn.execute(q, args):
             yield Event(

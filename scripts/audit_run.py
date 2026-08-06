@@ -512,6 +512,27 @@ class Audit:
                  f"{len(quiet)} days rendered no morning scene at all",
                  [f"days: {quiet[:20]}"] if quiet else [])
 
+    def probe_talk(self) -> None:
+        """Does anyone in this block ever talk to someone from another house?
+        The first soak's answer was no, across 30 days and 306 people."""
+        talks = [e for e in self.by_type["conversation.held"] if e.payload.get("participants")]
+        if not self.by_type["scene.morning"]:
+            self.add("TALK-COVERAGE", "SKIP", "clockwork run — no camera to render talk")
+            return
+        pairs = {tuple(sorted(e.payload["participants"])) for e in talks}
+        days = {e.day for e in talks}
+        cross = [
+            e for e in talks
+            if len({self.hh_of.get(self.norm_id(p)) for p in e.payload["participants"]}) > 1
+        ]
+        self.add(
+            "TALK-COVERAGE",
+            "WARN" if not cross else "PASS",
+            f"{len(cross)} cross-household exchanges on {len(days)} of {self.n_days} days, "
+            f"{len(pairs)} distinct pairs",
+            [] if cross else ["nobody spoke to anyone outside their own household all run"],
+        )
+
     def probe_cost(self) -> None:
         calls = self.by_type["llm.response"]
         if not calls:
@@ -608,6 +629,7 @@ class Audit:
         self.probe_hazards()
         self.probe_info()
         self.probe_scenes()
+        self.probe_talk()
         self.probe_cost()
         self.probe_temporal_drift()
         self.probe_prompt_hygiene()
