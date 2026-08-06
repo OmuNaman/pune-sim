@@ -199,6 +199,26 @@ def census(seed: int = typer.Option(None), households: int = typer.Option(80)) -
 
 
 @app.command()
+def serve(
+    db: str = typer.Option("runs/exam/events.db", help="Event log to view"),
+    seed: int = typer.Option(None),
+    port: int = typer.Option(8618),
+    households: int = typer.Option(80),
+) -> None:
+    """Serve the map viewer at http://127.0.0.1:<port>."""
+    import uvicorn
+
+    from punesim import config
+    from punesim.viewer import create_app
+
+    cfg = config.from_env()
+    run_seed = seed if seed is not None else cfg.run_seed
+    application = create_app(db, run_seed, n_households=households)
+    typer.echo(f"Pune Sim viewer -> http://127.0.0.1:{port}  (log: {db}, seed: {run_seed})")
+    uvicorn.run(application, host="127.0.0.1", port=port, log_level="warning")
+
+
+@app.command()
 def doctor() -> None:
     """Check environment: keys present, mode, models, cassette path."""
     from punesim import config
