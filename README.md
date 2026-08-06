@@ -78,11 +78,37 @@ reserved budget), ~$12–14/sim-day at full Pune. Local GPU optional
 - [x] Concept research and feasibility (see `docs/`)
 - [x] Architecture document — [docs/architecture.md](docs/architecture.md) (16-agent planning fleet; per-subsystem blueprints + red-team critiques in [docs/subsystems/](docs/subsystems/))
 - [x] Second-pass audit (2026-07-31, six-agent fleet): identity layer resolved ([08-identity](docs/subsystems/08-identity.md)), collective dynamics added ([09-collective-dynamics](docs/subsystems/09-collective-dynamics.md)), cost model corrected, data sources verified, 19 coherence rulings ([architecture §9](docs/architecture.md))
-- [ ] **V0 — one peth block, full stack thin (~6–10 wks):** constitution kernel (event log, keyed RNG, WorldDelta, fact gate) + ~50–100 households + one scene lane + injection + interview. **Exit: the school-bus-crash scenario runs end-to-end and feels alive; replay bit-identical.**
-- [ ] V1 — texture: rumor/INFO, hazards, pressure integrators, minimal map
-- [ ] V2 — institutions push back: FIR + hospital procedures, finances-lite, LLM injection compiler, branch-diff, minimal riot probe
+- [x] **V0 — one peth block, full stack thin:** constitution kernel (event log, keyed RNG, WorldDelta, fact gate) + 80 households on the real Kasba OSM block + morning scene lane + injection + interview. Exit met: the crash scenario runs end to end, replay is hash-identical at zero API cost.
+- [~] **V1 — texture:** INFO v1 (claims as data, mechanical distortion ops, logit belief update, Maki-Thompson stifling), thin hazards with tiered percepts, two pressure integrators, Leaflet viewer. An injected false rumour spread to 27 people through 5 drifting variants and changed 10 people's behaviour; an un-injected school fire became the block's biggest news on its own. The cost and rumour-lifecycle exits are met by a wide margin ($0.0017/sim-day against a $1 bar); **the 30-day continuity exit is under re-test** — see V1.1.
+- [x] **V2 — institutions push back:** hospital admission → stay → bill → loan, police FIR taken from the complainant's *own* drifted account, finances-lite, LLM injection compiler (free text → grounded, validated injection), branch-lite (fork a world, diff the timelines), and a minimal collective-dynamics instance (Granovetter mobilization, police, curfew, shelter).
+- [~] **V1.1 — the 30-day soak's findings, fixed:** the first soak passed on cost and rumour lifecycle and *failed* the continuity exit with four contradictions, so every failure was root-caused against the event log and closed — scenes no longer see their own prior output (64% of every prompt block used to be the household's own words), ids arrive with names and events with dates, witnesses keep what they saw, attention rotates instead of freezing, work is counted by absence rather than by activity strings, and `scripts/audit_run.py` turns all of it into 27 mechanical probes. **The verdict is the re-soak, which is running; this line is not a claim until `runs/soak2/REPORT.md` exists.**
 - [ ] V3 — real Pune data at scale: full ingest, IPF synthesis, traffic, Procedure interpreter, inference gateway, PMTiles viewer (subsumes "Old City breathing with zero LLM calls")
 - [ ] V4+ — arcs, courts, QC depth, collective dynamics in full, counterfactual 2026-election replay, 3.5M scale-out
 
 The doc suite is the *reference architecture*; execution follows the vertical
 slices above ([architecture §6](docs/architecture.md)).
+
+## Running it
+
+```bash
+uv sync
+uv run pytest -q                       # 94 tests, no API key needed
+
+# the whole block breathing, zero LLM calls, deterministic
+uv run punesim run --days 7 --db runs/dev/events.db
+
+# with minds: morning scenes for the attention-gated households
+uv run punesim run --days 30 --scenes --follow hh:000 --db runs/soak/events.db
+
+# the map viewer: follow anyone, read their scenes, inject, interview
+uv run punesim serve --db runs/soak/events.db      # http://127.0.0.1:8618
+
+# free text -> a grounded, validated injection (no event-specific code)
+uv run punesim compile "the mandal treasurer stole two lakh rupees"
+
+# fork a world, run the what-if, and diff the two timelines
+uv run punesim branch --db runs/soak/events.db --inject runs/injections/ui_compiled.json
+
+# mechanical audit of any run: duplication, identity, spotlight, hazards, cost
+uv run python scripts/audit_run.py --db runs/soak/events.db --seed 108
+```

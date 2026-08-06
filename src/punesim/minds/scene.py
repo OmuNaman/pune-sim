@@ -301,17 +301,27 @@ def witnessed_facts(
     Friday afternoon is still a fixed fact on Wednesday — the soak's model, given
     only a vague memory and no timestamp, decided it had happened "at night",
     contradicting an event four of the family had personally witnessed."""
-    out: list[str] = []
+    # One line per thing seen, not per witness: four family members watching the
+    # same fire produced four near-identical lines, and a prompt full of near-
+    # identical lines is exactly what teaches a model to repeat itself.
+    seen: dict[str, tuple[int, str, list[str]]] = {}
     for e in log.events(type="info.heard"):
         if until is not None and e.sim_time >= until:
             continue
         p = e.payload
         if p.get("channel") != "witness" or p.get("person") not in member_ids:
             continue
-        out.append(
-            f"- {_who(p.get('person', ''), people, block)} was there and saw it:"
-            f" \"{p.get('claim', {}).get('text', '')}\" — {_when(e.sim_time, day)}"
-        )
+        key = p.get("claim_key") or p.get("claim", {}).get("key", "")
+        who = _who(p.get("person", ""), people, block)
+        if key in seen:
+            seen[key][2].append(who)
+        else:
+            seen[key] = (e.sim_time, p.get("claim", {}).get("text", ""), [who])
+    out = [
+        f"- {', '.join(names)} {'were' if len(names) > 1 else 'was'} there and saw it:"
+        f' "{text}" — {_when(t, day)}'
+        for t, text, names in sorted(seen.values())
+    ]
     return out[-limit:]
 
 
@@ -465,10 +475,18 @@ def apply_delta(
     dropped: list[str] = []
     repeated: list[str] = []
 
+    def canonical(pid: str | None) -> str:
+        """The model writes both `person:002.1` and a bare `002.1`. Committing
+        the bare form means the receiving household's own prompt never matches
+        it, so an inbound message quietly reaches nobody."""
+        if not pid:
+            return pid or ""
+        return pid if ":" in pid else f"person:{pid}"
+
     def known(pid: str | None) -> bool:
         if people is None or not pid:
             return True
-        norm = pid if pid.startswith(("person:", "place:", "home:", "org:")) else f"person:{pid}"
+        norm = canonical(pid)
         if norm in people or norm.startswith(("place:", "home:", "org:")):
             return True
         dropped.append(pid)
@@ -494,6 +512,7 @@ def apply_delta(
     for m in delta.memory_writes:
         if not known(m.person_id):
             continue
+        m = m.model_copy(update={"person_id": canonical(m.person_id)})
         # A memory already held is not a new memory. The prompt asks for this
         # and the model mostly complies, but a life made of the same three
         # remembered incidents is the failure mode worth a hard guarantee.
@@ -516,13 +535,13 @@ def apply_delta(
             EventIn(
                 type="mood.delta",
                 sim_time=sim_time,
-                payload={"person": md.person_id, "dim": md.dim, "delta": md.delta},
+                payload={"person": canonical(md.person_id), "dim": md.dim, "delta": md.delta},
                 caused_by=scene_seq,
                 provenance="llm_scene",
             )
         )
     for msg in delta.messages:
-        recipients = [r for r in msg.recipients if known(r)]
+        recipients = [canonical(r) for r in msg.recipients if known(r)]
         if not known(msg.sender) or (msg.recipients and not recipients):
             continue
         batch.append(
@@ -530,7 +549,7 @@ def apply_delta(
                 type="message.sent",
                 sim_time=sim_time,
                 payload={
-                    "sender": msg.sender,
+                    "sender": canonical(msg.sender),
                     "recipients": recipients,
                     "channel": msg.channel,
                     "text": msg.text,
@@ -561,7 +580,7 @@ def apply_delta(
                 type="condition.set",
                 sim_time=sim_time,
                 payload={
-                    "entity_id": c.entity_id,
+                    "entity_id": canonical(c.entity_id),
                     "kind": c.kind,
                     "intensity": c.intensity,
                     "stage": c.stage,

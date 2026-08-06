@@ -59,9 +59,19 @@ FIR_SEVERITY_MIN = 0.4
 ABSENT_ACTIVITIES = {"admitted", "rest_at_home", "shelters_at_home", "stays_home"}
 
 
-def absent_today(state: "ProcState", day: int, log_events_today: list) -> set[str]:
+def absent_today(
+    state: "ProcState",
+    day: int,
+    log_events_today: list,
+    extra: set[str] | None = None,
+) -> set[str]:
     """Who demonstrably did not work today: in hospital, convalescing at home,
-    sheltering under a curfew, or keeping away from somewhere they fear."""
+    sheltering under a curfew, or keeping away from somewhere they fear.
+
+    `extra` carries absences the log cannot show. A household whose scene
+    re-planned the day writes its own free-text activities, so a spotlit person
+    under curfew never emits `shelters_at_home` — they lost the wage all the
+    same, and the engine passes that set in directly."""
     out = {
         e.payload.get("person")
         for e in log_events_today
@@ -70,6 +80,7 @@ def absent_today(state: "ProcState", day: int, log_events_today: list) -> set[st
     }
     out |= {pid for pid, (until, _) in state.in_hospital.items() if day < until}
     out |= {pid for pid, until in state.rest.items() if day < until}
+    out |= extra or set()
     out.discard(None)
     return out
 
@@ -226,11 +237,12 @@ def daily_finance_tick(
     day: int,
     people: dict[str, Person],
     log_events_today: list,
+    extra_absent: set[str] | None = None,
 ) -> tuple[list[tuple[TimedEvent, int | None]], dict[str, float]]:
     """Earn, spend, pay bills, borrow when short, accrue interest.
     Returns ([(event, caused_by)] to commit now, {person: p_financial})."""
     out: list[tuple[TimedEvent, int | None]] = []
-    absent = absent_today(state, day, log_events_today)
+    absent = absent_today(state, day, log_events_today, extra_absent)
     t_night = (day + 1) * SECONDS_PER_DAY - 600
 
     by_hh: dict[str, list[Person]] = {}

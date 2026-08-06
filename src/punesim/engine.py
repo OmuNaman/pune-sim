@@ -275,6 +275,7 @@ class SimState:
     proc: proc_mod.ProcState = field(default_factory=proc_mod.ProcState)  # V2 institutions
     pending: dict = field(default_factory=dict)  # future_day -> [TimedEvent] (procedure futures)
     unrest: unrest_mod.UnrestState = field(default_factory=unrest_mod.UnrestState)
+    sheltered: set = field(default_factory=set)  # today's curfew-bound, pre-scene
 
 
 def _apply_zones(
@@ -284,6 +285,10 @@ def _apply_zones(
     """Active fear/curfew zones keep households home — the shelter side of
     collective dynamics. Essential occupations keep moving; scene plans win."""
     shelters = unrest_mod.zone_shelters(state.unrest, day, block, people)
+    # Record everyone the curfew covers, INCLUDING those a scene is about to
+    # re-plan: they still lost the day's wage, and the finance lane can only
+    # see the activity strings the engine writes, never the scene's free text.
+    state.sheltered = set(shelters)
     shelters = {pid: z for pid, z in shelters.items() if pid not in skip}
     if not shelters:
         return timed
@@ -682,6 +687,7 @@ def run_simulation(
         timed = _compile_day(run_seed, block, people, day, overrides, worksites)
         timed = _apply_beliefs(timed, people, state, day, skip=set(overrides))
         timed = _apply_stays(timed, people, state, day, skip=set(overrides))
+        state.sheltered = set()
         timed = _apply_zones(block, timed, people, state, day, skip=set(overrides))
         pre_routine = [
             (t, pid, ty, te.payload)
@@ -829,7 +835,9 @@ def run_simulation(
         new_pending = proc_mod.step(today, state.proc, run_seed, day, block, people, state.info)
         for d, tes in new_pending.items():
             state.pending.setdefault(d, []).extend(tes)
-        fin_events, p_fin = proc_mod.daily_finance_tick(state.proc, day, people, today)
+        fin_events, p_fin = proc_mod.daily_finance_tick(
+            state.proc, day, people, today, extra_absent=state.sheltered
+        )
         for te, caused_by in fin_events:
             log.commit([EventIn(type=te.type, sim_time=te.sim_time, payload=te.payload,
                                 caused_by=caused_by, provenance="clockwork")])
