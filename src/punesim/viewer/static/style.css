@@ -134,6 +134,7 @@ details details { margin: 4px 0; border-style: dashed; }
 .scenecard { margin-bottom: 10px; }
 .scenecard summary .when { color: var(--fg-faint); font-weight: 400; margin-left: auto; }
 .scenecard.reaction summary { color: var(--danger); }
+.scenecard.talk summary { color: var(--rumor); }
 
 .qa { margin: 10px 0; }
 .qa .q { font-style: italic; color: var(--fg-faint); font-size: .85em; margin-bottom: 4px; }

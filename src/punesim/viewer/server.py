@@ -348,6 +348,20 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> Fas
                     "narration": e.payload.get("narration", ""),
                     "transcript": e.payload.get("transcript", ""),
                 })
+            elif e.type == "conversation.held" and e.payload.get("participants"):
+                # street talk belongs beside the household scenes: it is the
+                # same camera, pointed at two families instead of one
+                who = e.payload["participants"]
+                out.append({
+                    "seq": e.seq, "t": e.sim_time, "day": e.sim_time // SECONDS_PER_DAY,
+                    "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                    "kind": "conversation.held",
+                    "household": people[who[0]].household_id if who[0] in people else "",
+                    "family": " & ".join(person_names.get(x, x) for x in who),
+                    "narration": e.payload.get("narration", ""),
+                    "transcript": e.payload.get("transcript", ""),
+                })
+        out.sort(key=lambda x: (x["t"], x["seq"]))
         return out
 
     @app.get("/api/ticker")

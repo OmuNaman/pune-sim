@@ -402,8 +402,8 @@ async function selectPerson(pid) {
 /* ---------- inspector: scenes ---------- */
 function renderScenesPanel() {
   $("#panel-scenes").innerHTML = state.scenes.slice().reverse().map((s) => `
-    <details class="scenecard${s.kind === "scene.reaction" ? " reaction" : ""}">
-      <summary>${s.kind === "scene.reaction" ? "⚡ Reaction" : "Morning"} — ${esc(s.family)} family
+    <details class="scenecard${s.kind === "scene.reaction" ? " reaction" : ""}${s.kind === "conversation.held" ? " talk" : ""}">
+      <summary>${s.kind === "scene.reaction" ? "⚡ Reaction" : s.kind === "conversation.held" ? "🗣 In the lane" : "Morning"} — ${esc(s.family)}${s.kind === "conversation.held" ? "" : " family"}
         <span class="when">${esc(s.hm)}</span></summary>
       <div class="body">
         ${s.narration ? `<div class="narration">${esc(s.narration)}</div>` : ""}
