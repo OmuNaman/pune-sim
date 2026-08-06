@@ -71,6 +71,39 @@ class Injection:
         )
 
 
+# Which hazard classes put a body in an ambulance — and which have an
+# institution on the other end that is simply not a medical emergency. Keying
+# on the presence of a place instead sent an ambulance to a water cut.
+CASUALTY_PREFIXES = ("hazard.road.collision", "hazard.fire.small", "hazard.violence")
+
+
+def _utility_reactions(
+    inj: Injection, t_abs: int, caused_by: int | None = None
+) -> list[TimedEvent]:
+    """A dry tap or a load-shed is not silent: somebody complains and somebody
+    eventually turns it back on. Deterministic in severity — no draws, so law 4
+    is untouched — and clamped inside the day so commit order stays honest."""
+    out: list[TimedEvent] = []
+    sev = float(inj.severity or 0.5)
+    day_end = (t_abs // SECONDS_PER_DAY + 1) * SECONDS_PER_DAY - 60
+    if inj.type == "hazard.water.supply_cut":
+        out.append(TimedEvent(t_abs + 40 * 60, "complaint.registered",
+                              {"org": "org:pmc_water", "place": inj.place,
+                               "about": inj.type, "severity": sev}, caused_by))
+        out.append(TimedEvent(min(t_abs + 3 * 3600, day_end), "utility.tanker_arrived",
+                              {"org": "org:pmc_water", "place": inj.place,
+                               "loads": 1 + int(sev * 2)}, caused_by))
+    elif inj.type == "hazard.power.outage":
+        out.append(TimedEvent(t_abs + 15 * 60, "complaint.registered",
+                              {"org": "org:mseb", "place": inj.place,
+                               "about": inj.type, "severity": sev}, caused_by))
+        out.append(TimedEvent(min(t_abs + int(1800 + sev * 4 * 3600), day_end),
+                              "utility.restored",
+                              {"org": "org:mseb", "place": inj.place,
+                               "utility": "power"}, caused_by))
+    return out
+
+
 def stub_institution_reactions(
     inj: Injection, t_abs: int, block: Block, people: dict[str, Person], caused_by: int | None = None
 ) -> list[TimedEvent]:
@@ -80,6 +113,8 @@ def stub_institution_reactions(
     out: list[TimedEvent] = []
     if not inj.type.startswith("hazard."):
         return out
+    if not inj.type.startswith(CASUALTY_PREFIXES):
+        return _utility_reactions(inj, t_abs, caused_by)
     if inj.place:
         out.append(
             TimedEvent(t_abs + 8 * 60, "ambulance.dispatched",

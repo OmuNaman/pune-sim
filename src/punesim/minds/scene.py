@@ -177,6 +177,13 @@ def _humanize(
             f"{who(payload.get('complainant', ''))} registered an FIR at {pname(payload.get('station', ''))}"
             f" — statement: \"{payload.get('statement', '')}\""
         )
+    if e_type == "complaint.registered":
+        org = {"org:pmc_water": "the municipal water office", "org:mseb": "the electricity board"}
+        return f"a complaint went in to {org.get(payload.get('org', ''), payload.get('org', '?'))} about {pname(payload.get('place', ''))}"
+    if e_type == "utility.tanker_arrived":
+        return f"a municipal water tanker reached {pname(payload.get('place', ''))} ({payload.get('loads', 1)} load(s))"
+    if e_type == "utility.restored":
+        return f"{payload.get('utility', 'supply')} came back around {pname(payload.get('place', ''))}"
     if e_type == "fir.update":
         return f"police update on the case: {payload.get('status', '')}"
     if e_type == "crowd.gathered":

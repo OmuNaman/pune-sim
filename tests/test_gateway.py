@@ -151,3 +151,15 @@ def test_detect_refusal_heuristics():
     assert not detect_refusal(
         "The uncle raises his voice about the proposal. " * 5 + "They part without agreement."
     )
+
+
+def test_a_literal_newline_inside_a_narration_is_not_a_failure(tmp_path):
+    """The soak's most severe hazard lost its reaction scene to this: orjson is
+    strict about control characters, and the model had written a transcript
+    with a real newline inside the string. Parsed locally, no retry, no new
+    cassette slot — old recordings replay unchanged."""
+    t = FakeTransport({"fake/workhorse": ['{"outcome": "he came\nhome late", "mood": -0.3}']})
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
+    r = g.call("scene", MSGS, SceneOut)
+    assert r.status == "ok" and len(t.calls) == 1
+    assert r.parsed.outcome == "he came\nhome late"

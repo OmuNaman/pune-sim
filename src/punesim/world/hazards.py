@@ -27,6 +27,7 @@ CLASSES: list[tuple[str, float, tuple[int, int], str, str, tuple[str, ...], floa
 NEARBY_M = 220.0  # you notice the commotion from a couple of lanes away
 AREA_M = 320.0  # an area hazard (water cut, outage) covers homes within this
 WITNESS_PAD_S = 30 * 60  # present within half an hour of it counts as seeing it
+MIN_AUDIENCE = 3  # fewer perceivers than this and it is a tree falling in no forest
 
 
 @dataclass(frozen=True)
@@ -51,27 +52,31 @@ def sample_day(
     intervals: dict[str, list[tuple[str, int, int]]],
 ) -> list[Hazard]:
     """Keyed draws only — adding or removing one hazard class never perturbs
-    another's realizations (law 4). Venues are limited to the populated core:
-    a hazard at a far-flung OSM stray that nobody lives near or visits would
-    be a tree falling in no forest."""
+    another's realizations (law 4).
+
+    The hour is drawn BEFORE the venue, because who is out and about depends on
+    the time: the 06:00-09:00 water window and the 10:00-22:00 outage window
+    have completely different populated cores, and a static count of nearby
+    homes cannot tell them apart. A venue with nobody to perceive it is not a
+    hazard, it is a tree falling in no forest — the soak's day-9 water cut hit
+    a school whose 320 m catchment held one home with nobody in it, and
+    produced zero percepts and zero conversation."""
     out: list[Hazard] = []
-    named = sorted(
-        (
-            p for p in block.places
-            if p.name and any(
-                haversine_m(p.lat, p.lon, h.lat, h.lon) <= AREA_M for h in block.homes
-            )
-        ),
-        key=lambda p: p.id,
-    )
+    named = sorted((p for p in block.places if p.name), key=lambda p: p.id)
     if not named:
         return out
     for cls, rate, (w0, w1), shape, predicate, topics, charge in CLASSES:
         rng = keyed_rng(run_seed, "hazard", cls, day, "realize")
         if rng.random() >= rate:
             continue
-        place = named[int(rng.integers(0, len(named)))]
         t_abs = day * SECONDS_PER_DAY + w0 + int(rng.integers(0, max(1, (w1 - w0) // 60))) * 60
+        live = [
+            p for p in named
+            if len(witness_tiers(p.id, t_abs, shape, block, people, intervals)) >= MIN_AUDIENCE
+        ]
+        if not live:
+            continue  # nobody would perceive it; do not fabricate a hazard
+        place = live[int(rng.integers(0, len(live)))]
         severity = 0.25 + rng.random() * 0.5
         participants: tuple[str, ...] = ()
         if shape == "point" and cls == "hazard.road.collision":

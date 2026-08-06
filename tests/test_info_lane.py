@@ -260,3 +260,41 @@ def test_your_own_story_does_not_come_back_to_convince_you(tmp_path, world):
         if e.payload["person"] in (e.payload.get("lineage") or [])
     ]
     assert not echoes, f"{len(echoes)} hearings came back to their own teller"
+
+
+def test_a_hazard_always_lands_where_someone_can_perceive_it(tmp_path, world):
+    """The soak's day-9 water cut hit a school whose catchment held one home
+    with nobody in it: zero percepts, zero conversation, a non-event that still
+    consumed a hazard draw."""
+    block, hhs, people = world
+    log = EventLog(tmp_path / "haz.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=30, hazards=True)
+    hazards = [e for e in log.events() if e.type.startswith("hazard.")]
+    assert hazards, "30 days and not one hazard — nothing was tested"
+    for h in hazards:
+        percepts = [e for e in log.events(type="info.heard") if e.caused_by == h.seq]
+        assert percepts, f"{h.type} at day {h.sim_time // 86400} was perceived by nobody"
+
+
+def test_only_a_casualty_gets_an_ambulance(tmp_path, world):
+    """Reactions keyed on the presence of a place, not the kind of trouble —
+    so the soak dispatched an ambulance to a water cut and to a power cut."""
+    block, hhs, people = world
+    log = EventLog(tmp_path / "amb.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=30, hazards=True)
+    by_seq = {e.seq: e for e in log.events()}
+    for amb in log.events(type="ambulance.dispatched"):
+        cause = by_seq.get(amb.caused_by)
+        assert cause is not None and cause.type.startswith(engine.CASUALTY_PREFIXES), (
+            f"ambulance sent for {cause.type if cause else '?'}"
+        )
+    utility = [
+        e for e in log.events()
+        if e.type in ("complaint.registered", "utility.tanker_arrived", "utility.restored")
+    ]
+    outages = [e for e in log.events() if e.type in
+               ("hazard.water.supply_cut", "hazard.power.outage")]
+    if outages:
+        assert utility, "a utility failed and no institution anywhere noticed"
+        for e in utility:
+            assert e.caused_by is not None

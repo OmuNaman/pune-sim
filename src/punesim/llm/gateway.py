@@ -10,6 +10,7 @@ never silently templated. Every response is committed to the event log as
 recorded nondeterminism when a log is attached.
 """
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import blake2b
@@ -76,6 +77,20 @@ def _extract_json(text: str) -> bytes:
     if start == -1 or end <= start:
         raise ValueError("no JSON object in output")
     return text[start : end + 1].encode("utf-8")
+
+
+def _loads(raw: bytes) -> Any:
+    """orjson first; the stdlib in non-strict mode as a fallback.
+
+    A model that puts a literal newline inside a narrated transcript string has
+    not actually failed — orjson is simply strict about control characters, and
+    that strictness cost the 30-day soak its most severe hazard's reaction
+    scene. Local parsing only: no extra request, no new cassette slot, replays
+    old recordings unchanged."""
+    try:
+        return orjson.loads(raw)
+    except orjson.JSONDecodeError:
+        return json.loads(raw.decode("utf-8", "replace"), strict=False)
 
 
 @dataclass(frozen=True)
@@ -218,7 +233,7 @@ class Gateway:
             return LLMResult(text, text, model, rid, usage, status)
 
         try:
-            parsed = schema.model_validate(orjson.loads(_extract_json(text)))
+            parsed = schema.model_validate(_loads(_extract_json(text)))
             return LLMResult(parsed, text, model, rid, usage, status)
         except (ValueError, ValidationError) as err:
             repair = messages + [
@@ -230,27 +245,34 @@ class Gateway:
                 },
             ]
             rid2, text2, usage2 = self._fetch(model, repair, schema_name, temperature, max_tokens)
+            if not text2.strip():  # the same provider blip, on the repair leg
+                rid2, text2, usage2 = self._fetch(
+                    model, repair, schema_name, temperature, max_tokens, attempt=1
+                )
             if self.log is not None:
                 self.log.record_llm_response(
                     request_id=rid2, model=model, response_text=text2, usage=usage2, sim_time=sim_time
                 )
             try:
-                parsed = schema.model_validate(orjson.loads(_extract_json(text2)))
+                parsed = schema.model_validate(_loads(_extract_json(text2)))
             except (ValueError, ValidationError):
                 # The repair conversation can itself be the problem — a model that
                 # answered in prose once tends to keep apologizing in prose. One
                 # clean RESAMPLE of the original prompt in a distinct cassette
                 # slot, then we give up. (Replay integrity is untouched: a miss
                 # inside _fetch still raises CassetteMiss — law 1.)
+                # Double the budget: the dominant failure is a scene truncated
+                # mid-JSON at the token cap, and re-rolling at the same ceiling
+                # just re-rolls the same failure.
                 rid3, text3, usage3 = self._fetch(
-                    model, messages, schema_name, temperature, max_tokens, attempt=2
+                    model, messages, schema_name, temperature, max_tokens * 2, attempt=2
                 )
                 if self.log is not None:
                     self.log.record_llm_response(
                         request_id=rid3, model=model, response_text=text3, usage=usage3, sim_time=sim_time
                     )
                 try:
-                    parsed = schema.model_validate(orjson.loads(_extract_json(text3)))
+                    parsed = schema.model_validate(_loads(_extract_json(text3)))
                 except (ValueError, ValidationError) as err3:
                     raise SchemaError(f"failed after repair and resample: {err3}") from err3
                 status = "rerouted_resampled" if status == "rerouted_premium" else "resampled"
