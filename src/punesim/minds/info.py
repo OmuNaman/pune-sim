@@ -31,6 +31,7 @@ MIN_CREDENCE_TO_SHARE = 0.3
 LAMBDA = 2.9  # logit update step size — one vivid telling should genuinely move you
 PRIOR_CREDENCE = 0.15  # first hearing of an unheard claim starts here
 WITNESS_CREDENCE = 0.95
+LINEAGE_MAX = 16  # how far back a variant remembers whose mouths it passed through
 
 TRUST_W = {"witness": 1.0, "household": 0.9, "f2f": 0.6, "phone": 0.7, "official": 0.9}
 
@@ -247,6 +248,8 @@ class Holding:
     last_source: str = ""
     stifled: bool = False  # Maki-Thompson: no longer retells this claim
     shares_today: int = 0
+    witnessed: bool = False  # they saw it themselves; set once, never cleared
+    lineage: tuple[str, ...] = ()  # mouths this variant already passed through
 
 
 @dataclass
@@ -255,7 +258,8 @@ class InfoState:
 
     def hear(
         self, person_id: str, claim: Claim, credence: float, day: int, seq: int,
-        source: str = "", t_abs: int = 0,
+        source: str = "", t_abs: int = 0, channel: str = "",
+        lineage: tuple[str, ...] = (),
     ) -> None:
         by_key = self.holdings.setdefault(person_id, {})
         h = by_key.get(claim.key)
@@ -263,10 +267,26 @@ class InfoState:
             by_key[claim.key] = Holding(
                 claim=claim, credence=credence, exposures=1, first_day=day,
                 last_seq=seq, heard_abs=t_abs, last_source=source,
+                witnessed=channel == "witness", lineage=lineage[-LINEAGE_MAX:],
             )
-        else:
-            h.claim, h.credence, h.last_seq = claim, credence, seq
-            h.exposures, h.last_source = h.exposures + 1, source
+            return
+        # What you saw with your own eyes is not overwritten by what you are
+        # told about it (03-cognition §6.4: a percept outranks a report). The
+        # one exception is genuine enrichment — an UNDISTORTED account that is
+        # more precise than your own glimpse, which is how someone two lanes
+        # away learns what actually happened. Your confidence still moves
+        # either way: hearing it again from the family is corroboration.
+        enriches = claim.veracity == "true" and claim.specificity > h.claim.specificity
+        sticky = h.witnessed and channel != "witness" and not enriches
+        if not sticky:
+            # claim and last_seq move TOGETHER: last_seq anchors the caused_by
+            # of the next hop, so a mismatched pair would make the drift audit
+            # point at an event carrying a different variant.
+            h.claim, h.last_seq, h.lineage = claim, seq, lineage[-LINEAGE_MAX:]
+        h.credence = credence
+        h.exposures, h.last_source = h.exposures + 1, source
+        if channel == "witness":
+            h.witnessed = True
 
     def reset_day(self) -> None:
         for by_key in self.holdings.values():
@@ -285,6 +305,7 @@ class Heard:
     channel: str
     credence: float
     caused_by: int | None
+    lineage: tuple[str, ...] = ()  # the chain of mouths, oldest first
 
 
 # --- presence + propagation -------------------------------------------------
@@ -367,6 +388,13 @@ def _try_share(
                 continue
             if rh.exposures >= SATURATION_EXPOSURES:
                 continue
+        if receiver in h.lineage:
+            # You are already in this story's chain — this is your own account
+            # coming back to you. Hearing your own words repeated is not
+            # evidence; before this guard, 12% of all hearings were echoes and
+            # they were the fastest route to false certainty. Placed AFTER the
+            # stifle draw so Maki-Thompson death dynamics are untouched.
+            continue
         fresh = math.exp(-max(0, day - h.first_day) / FRESHNESS_TAU_DAYS)
         tr = traits(run_seed, sharer)
         base = 0.9 if channel == "household" else P_SHARE_BASE * (0.4 + 0.6 * tr.sociability)
@@ -382,9 +410,15 @@ def _try_share(
             prior, channel, exposures, traits(run_seed, receiver).credulity, variant.charge,
             same_source=rh is not None and rh.last_source == sharer,
         )
-        heard = Heard(t, receiver, variant, sharer, channel, round(credence, 3), h.last_seq or None)
+        onward = (*h.lineage, sharer)[-LINEAGE_MAX:]
+        heard = Heard(
+            t, receiver, variant, sharer, channel, round(credence, 3), h.last_seq or None, onward
+        )
         seq = commit_heard(heard)
-        state.hear(receiver, variant, credence, day, seq, source=sharer, t_abs=t)
+        state.hear(
+            receiver, variant, credence, day, seq, source=sharer, t_abs=t,
+            channel=channel, lineage=onward,
+        )
         out.append(heard)
     return out
 

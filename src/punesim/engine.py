@@ -488,6 +488,7 @@ def _info_pass(
                         "person": h.person, "claim_key": h.claim.key,
                         "claim": h.claim.to_payload(), "source": h.source,
                         "channel": h.channel, "credence": h.credence,
+                        "lineage": list(h.lineage),  # the mouths it came through
                     },
                     caused_by=h.caused_by, provenance="clockwork",
                 )
@@ -532,7 +533,10 @@ def _info_pass(
             credence = hazards_mod.witness_credence(spec)
             heard = info_mod.Heard(e.sim_time + 300, pid, variant, "witness", "witness", credence, e.seq)
             seq = commit_heard(heard)
-            state.info.hear(pid, variant, credence, day, seq, source="witness", t_abs=heard.sim_time)
+            state.info.hear(
+                pid, variant, credence, day, seq, source="witness",
+                t_abs=heard.sim_time, channel="witness",
+            )
 
     heard = info_mod.propagate_day(
         state.info, run_seed, day, block, people, intervals, hh_members, commit_heard
@@ -833,12 +837,13 @@ def _seed_rumor(
                         "person": pid, "claim_key": claim.key,
                         "claim": claim.to_payload(), "source": "origin",
                         "channel": "f2f", "credence": round(credence, 3),
+                        "lineage": [],
                     },
                     caused_by=inj_seq, provenance="clockwork",
                 )
             ]
         )[0]
-        state.info.hear(pid, claim, credence, day, seq, source="origin", t_abs=t_abs)
+        state.info.hear(pid, claim, credence, day, seq, source="origin", t_abs=t_abs, channel="f2f")
         n += 1
     return n
 

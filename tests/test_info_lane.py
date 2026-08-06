@@ -182,3 +182,81 @@ def test_pressure_crossing_gates_and_commits(tmp_path, world):
     crossed = [e for e in log.events(type="pressure.crossed")]
     assert any(e.payload["person"] == victim.id and e.payload["pressure"] == "p_health" for e in crossed)
     assert state.pressures[victim.id]["p_health"] > 0.6
+
+
+def _claim(**kw):
+    base = {
+        "key": "cl:fire:place:x:d0", "subject": "place:x", "predicate": "fire",
+        "text": "A fire broke out at the school", "veracity": "true",
+        "specificity": 0.85, "topics": ("safety",),
+    }
+    base.update(kw)
+    return info.Claim(**base)
+
+
+def test_a_witness_keeps_their_own_account_but_not_their_certainty():
+    """You do not un-see a fire because your husband tells you a bigger one.
+    Confidence still moves — corroboration is real; the story does not."""
+    st = info.InfoState()
+    seen = _claim()
+    st.hear("p1", seen, 0.95, day=0, seq=1, source="witness", channel="witness")
+    rumour = _claim(
+        text="A fire broke out at the school — 6 people affected; people are blaming the temple",
+        quantity=6.0, unit="people", veracity="distorted", specificity=0.7,
+        ops=("EXAGGERATE", "REATTRIBUTE"), hop=2, blame="place:t",
+    )
+    st.hear("p1", rumour, 0.99, day=0, seq=2, source="p0", channel="household", lineage=("p1", "p0"))
+
+    h = st.holdings["p1"]["cl:fire:place:x:d0"]
+    assert h.claim.text == seen.text and h.claim.ops == () and h.claim.veracity == "true"
+    assert h.last_seq == 1, "last_seq must move with the claim or the drift audit lies"
+    assert h.credence == 0.99 and h.exposures == 2 and h.last_source == "p0"
+    assert h.witnessed
+
+
+def test_a_witness_still_learns_a_fuller_true_account():
+    """Someone who only heard the commotion two lanes away can be told what
+    actually happened — but only by an account that is precise AND undistorted."""
+    st = info.InfoState()
+    glimpse = _claim(text="Something happened at the school", specificity=0.55)
+    st.hear("p1", glimpse, 0.75, day=0, seq=1, source="witness", channel="witness")
+    fuller = _claim(specificity=0.85, veracity="true")
+    st.hear("p1", fuller, 0.9, day=0, seq=2, source="p2", channel="f2f", lineage=("p2",))
+    assert st.holdings["p1"]["cl:fire:place:x:d0"].claim.text == fuller.text
+
+    st2 = info.InfoState()
+    st2.hear("p1", glimpse, 0.75, day=0, seq=1, source="witness", channel="witness")
+    louder = _claim(specificity=0.9, veracity="distorted", ops=("SPECIFY",))
+    st2.hear("p1", louder, 0.9, day=0, seq=2, source="p2", channel="f2f", lineage=("p2",))
+    assert st2.holdings["p1"]["cl:fire:place:x:d0"].claim.text == glimpse.text
+
+
+def test_non_witnesses_still_update_normally():
+    st = info.InfoState()
+    st.hear("p1", _claim(), 0.4, day=0, seq=1, source="p9", channel="f2f", lineage=("p9",))
+    later = _claim(text="a much wilder version", ops=("EXAGGERATE",), veracity="distorted")
+    st.hear("p1", later, 0.7, day=0, seq=2, source="p8", channel="f2f", lineage=("p8",))
+    h = st.holdings["p1"]["cl:fire:place:x:d0"]
+    assert h.claim.text == "a much wilder version" and h.last_seq == 2
+
+
+def test_lineage_accumulates_and_keeps_the_recent_tail():
+    st = info.InfoState()
+    long_chain = tuple(f"p{i}" for i in range(info.LINEAGE_MAX + 5))
+    st.hear("px", _claim(), 0.5, day=0, seq=1, source="pz", channel="f2f", lineage=long_chain)
+    kept = st.holdings["px"]["cl:fire:place:x:d0"].lineage
+    assert len(kept) == info.LINEAGE_MAX
+    assert kept[-1] == long_chain[-1], "truncating the tail would disable echo detection"
+
+
+def test_your_own_story_does_not_come_back_to_convince_you(tmp_path, world):
+    """A->B->A: before this guard 12% of all hearings were echoes, and they
+    were the fastest route to false certainty about your own exaggeration."""
+    block, hhs, people = world
+    log = EventLog(tmp_path / "echo.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=6, hazards=True)
+    echoes = [
+        e for e in log.events(type="info.heard")
+        if e.payload["person"] in (e.payload.get("lineage") or [])
+    ]
+    assert not echoes, f"{len(echoes)} hearings came back to their own teller"
