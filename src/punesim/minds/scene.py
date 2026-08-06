@@ -333,6 +333,8 @@ def run_morning_scenes(
     *,
     chosen_ids: list[str],
 ) -> list[SceneResult]:
+    from ..llm.gateway import CassetteMiss
+
     results: list[SceneResult] = []
     by_id = {h.id: h for h in households}
     sim_time = day * SECONDS_PER_DAY + SCENE_HOUR_S
@@ -340,7 +342,17 @@ def run_morning_scenes(
         hh = by_id[hid]
         recent = recent_notable_events(log, set(hh.member_ids), day, block, until=sim_time)
         msgs = build_messages(block, hh, people, day, recent)
-        res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
+        try:
+            res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
+        except CassetteMiss:
+            raise  # replay integrity is law 1 — never soften it
+        except Exception as err:  # noqa: BLE001 — refusal/schema/transport: skip LOUDLY, day goes on
+            log.commit([EventIn(
+                type="scene.skipped", sim_time=sim_time,
+                payload={"household": hid, "reason": f"{type(err).__name__}: {err}"[:200]},
+                provenance="system",
+            )])
+            continue
         seq = apply_delta(
             log, canon, registry, res.parsed, household_id=hid, sim_time=sim_time
         )
