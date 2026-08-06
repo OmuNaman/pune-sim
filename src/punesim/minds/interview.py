@@ -53,7 +53,9 @@ def interview(
             if e.type == "activity.start":
                 timeline.append(f"- {when}: {p.get('activity')} at {place_name(p.get('at', ''))}")
         else:
-            timeline.append(f"- {when}: {_humanize(e.type, p, block)}")
+            line = _humanize(e.type, p, block, people)
+            if line:
+                timeline.append(f"- {when}: {line}")
 
     card = [
         f"PERSON CARD: {person.name}, {person.age}, {person.occupation}; "

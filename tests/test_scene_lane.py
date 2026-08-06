@@ -203,3 +203,107 @@ def test_record_then_replay_is_hash_identical(tmp_path, world):
     engine.run_simulation(log2, SEED, block, hhs, people, days=2, gateway=gw2, scenes_k=2)
 
     assert log1.determinism_hash() == log2.determinism_hash()
+
+
+def test_a_scene_is_never_shown_its_own_previous_output(tmp_path, world):
+    """The soak's central defect: 64% of every RECENT EVENTS block was the
+    household's own prior LLM output, and the model copied it forward — a
+    Sunday memory got re-formed word for word on Monday."""
+    block, hhs, people = world
+    hh = hhs[0]
+    t = ScriptedTransport([
+        _delta(
+            narration="Tuesday narration that must not reappear.",
+            memory_writes=[{"person_id": hh.member_ids[0], "salience": 0.9,
+                            "summary": "A very memorable Tuesday thing."}],
+            mood_deltas=[{"person_id": hh.member_ids[0], "dim": "mood", "delta": -0.2}],
+            messages=[{"sender": hh.member_ids[0], "recipients": [hh.member_ids[-1]],
+                       "channel": "talk", "text": "An utterance from our own scene."}],
+        ),
+        _delta(),
+    ])
+    log = EventLog(tmp_path / "echo.db")
+    gw = Gateway(_cfg(tmp_path), Cassette(tmp_path / "c.db"), transport=t, log=log)
+    engine.run_simulation(
+        log, SEED, block, hhs, people, days=2, gateway=gw, scenes_k=len(hhs), scene_gate_mode="all"
+    )
+    day2 = t.prompts[len(hhs)]  # first prompt of day 2 is hh:000 again under "all"
+    assert "Tuesday narration that must not reappear" not in day2
+    assert "An utterance from our own scene" not in day2
+    assert "memory.formed" not in day2 and "mood.delta" not in day2
+    assert "scene.morning" not in day2 and "plan.revised" not in day2
+    # ...but it IS carried deliberately, as dated background
+    assert "A very memorable Tuesday thing." in day2
+    assert "WHAT THEY ALREADY CARRY" in day2
+
+
+def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world):
+    """The raw-dict fallback was the leak's delivery mechanism; an unknown type
+    must now render nothing rather than a Python dict."""
+    import re
+
+    from punesim.minds.scene import _humanize
+
+    block, hhs, people = world
+    assert _humanize("some.future.type", {"person": "person:000.0"}, block, people) == ""
+    log = EventLog(tmp_path / "raw.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=4, hazards=True)
+    for hh in hhs[:6]:
+        lines = recent_notable_events(
+            log, set(hh.member_ids), 3, block, household_id=hh.id, people=people
+        )
+        assert not [ln for ln in lines if re.search(r": \{.*\}$", ln)], lines
+
+
+def test_every_id_in_a_prompt_arrives_with_a_name(tmp_path, world):
+    """A bare person id is an invitation to invent one: the soak's model met
+    `person:022.4` and produced "Shobha tai", an adult colleague, for a
+    six-year-old pupil — then kept her for four days."""
+    import re
+
+    block, hhs, people = world
+    log = EventLog(tmp_path / "ids.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=5, hazards=True)
+    seen = 0
+    for hh in hhs:
+        for line in recent_notable_events(
+            log, set(hh.member_ids), 4, block, household_id=hh.id, people=people
+        ):
+            for m in re.finditer(r"person:\d+\.\d+", line):
+                seen += 1
+                assert line[m.start() - 1] == "[", f"bare id in: {line}"
+    assert seen, "no person ids appeared at all — the assertion proved nothing"
+
+
+def test_events_carry_the_date_and_how_long_ago():
+    from punesim.minds.scene import _when
+
+    assert _when(86400 * 1 + 14 * 3600 + 5 * 60, 6).endswith("14:05 (5 days ago)")
+    assert "(yesterday)" in _when(86400 * 5, 6)
+    assert "(today)" in _when(86400 * 6 + 3600, 6)
+
+
+def test_a_witnessed_event_keeps_its_hour_forever(tmp_path, world):
+    """Contradiction 1 of the soak: a fire four family members watched at 14:05
+    was narrated days later as having "broken out at night"."""
+    from punesim.minds.scene import witnessed_facts
+
+    block, hhs, people = world
+    counts: dict[str, int] = {}
+    for p in people.values():
+        if p.work_id:
+            counts[p.work_id] = counts.get(p.work_id, 0) + 1
+    busiest = max(counts, key=lambda k: (counts[k], k))
+    inj = engine.Injection(day=0, time_s=14 * 3600 + 5 * 60, type="hazard.fire.small",
+                           place=busiest, severity=0.5)
+    log = EventLog(tmp_path / "w.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=6, injections=[inj])
+    watched = {
+        e.payload["person"] for e in log.events(type="info.heard")
+        if e.payload.get("channel") == "witness"
+    }
+    assert watched, "nobody saw the fire — nothing to anchor"
+    hh = next(h for h in hhs if set(h.member_ids) & watched)
+    facts = witnessed_facts(log, set(hh.member_ids), 5, block, people=people)
+    assert facts, "a witnessed fire vanished from the context after two days"
+    assert any("14:" in f and "days ago" in f for f in facts)
