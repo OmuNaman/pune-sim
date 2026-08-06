@@ -43,8 +43,8 @@ def from_env(env_file: str | Path | None = None) -> Config:
         scene_gate_mode=os.getenv("SCENE_GATE_MODE", "spotlight"),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY") or None,
         openrouter_base_url=os.getenv("OPENROUTER_BASE_URL", _DEFAULT_BASE_URL),
-        model_workhorse=os.getenv("PUNESIM_MODEL_WORKHORSE", "deepseek/deepseek-chat"),
-        model_flash=os.getenv("PUNESIM_MODEL_FLASH", "deepseek/deepseek-chat"),
-        model_premium=os.getenv("PUNESIM_MODEL_PREMIUM", "anthropic/claude-sonnet-4.5"),
+        model_workhorse=os.getenv("PUNESIM_MODEL_WORKHORSE", "deepseek/deepseek-v4-flash"),
+        model_flash=os.getenv("PUNESIM_MODEL_FLASH", "deepseek/deepseek-v4-flash"),
+        model_premium=os.getenv("PUNESIM_MODEL_PREMIUM", "anthropic/claude-sonnet-5"),
         runs_dir=runs_dir,
     )

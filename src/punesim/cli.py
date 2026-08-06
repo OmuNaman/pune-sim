@@ -24,12 +24,18 @@ def run(
     db: str = typer.Option("runs/dev/events.db", help="Event log path (recreated)"),
     seed: int = typer.Option(None, help="Run seed; default from .env"),
     households: int = typer.Option(80, help="Household count"),
+    scenes: bool = typer.Option(False, "--scenes", help="Fire LLM morning scenes (uses .env key)"),
+    k: int = typer.Option(5, help="Households per morning under the spotlight gate"),
+    inject: str = typer.Option(None, help="JSON file of injections [{day,time,type,place,participants,severity}]"),
 ) -> None:
-    """Synthesize the Kasba block and run clockwork days (zero LLM calls)."""
+    """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
+
+    import orjson
 
     from punesim import config, engine
     from punesim.kernel.log import EventLog
+    from punesim.llm import Cassette, Gateway
     from punesim.population import synthesize
     from punesim.world.block import Block
 
@@ -45,11 +51,81 @@ def run(
     block = Block.load()
     hhs, people = synthesize(run_seed, block, n_households=households)
     log = EventLog(path)
-    n = engine.run_days(log, run_seed, block, people, days=days)
+
+    injections = None
+    if inject:
+        injections = [engine.Injection.parse(o) for o in orjson.loads(Path(inject).read_bytes())]
+    gateway = Gateway(cfg, Cassette(cfg.cassette_path), log=log) if scenes else None
+
+    n, _state = engine.run_simulation(
+        log, run_seed, block, hhs, people,
+        days=days, gateway=gateway, scenes_k=k,
+        scene_gate_mode=cfg.scene_gate_mode, injections=injections,
+    )
     typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}")
-    typer.echo(f"events committed : {n} over {days} day(s)")
+    typer.echo(f"events committed : {n} over {days} day(s)"
+               + (f"  (scenes on, k={k}, gate={cfg.scene_gate_mode})" if scenes else "  (zero LLM)"))
+    if injections:
+        typer.echo(f"injections       : {len(injections)}")
     typer.echo(f"determinism hash : {log.determinism_hash()}")
     typer.echo(f"log              : {path}")
+
+
+@app.command()
+def scenes(db: str = typer.Option("runs/dev/events.db")) -> None:
+    """Print every rendered morning scene from the log."""
+    from rich.console import Console
+
+    from punesim.kernel.log import EventLog
+    from punesim.kernel.timebase import to_datetime
+
+    console = Console()
+    log = EventLog(db)
+    found = 0
+    for e in log.events(type="scene.morning"):
+        found += 1
+        t = to_datetime(e.sim_time).strftime("%a %d %b, %H:%M")
+        console.rule(f"[bold]{e.payload['household']}[/bold] — {t}")
+        if e.payload.get("narration"):
+            console.print(f"[italic]{e.payload['narration']}[/italic]")
+        if e.payload.get("transcript"):
+            console.print(e.payload["transcript"])
+    if not found:
+        console.print("no scenes in this log (run with --scenes)")
+
+
+@app.command()
+def interview(
+    person_id: str = typer.Argument(help="e.g. person:005.1"),
+    question: str = typer.Argument(help="what the journalist asks"),
+    db: str = typer.Option("runs/dev/events.db"),
+    seed: int = typer.Option(None),
+    ghost: bool = typer.Option(False, "--ghost", help="observe only; the person keeps no memory"),
+) -> None:
+    """Pause time and talk to any resident (premium model)."""
+    from rich.console import Console
+
+    from punesim import config
+    from punesim.kernel.log import EventLog
+    from punesim.llm import Cassette, Gateway
+    from punesim.minds.interview import interview as _interview
+    from punesim.population import synthesize
+    from punesim.world.block import Block
+
+    cfg = config.from_env()
+    run_seed = seed if seed is not None else cfg.run_seed
+    block = Block.load()
+    _, people = synthesize(run_seed, block)
+    if person_id not in people:
+        typer.echo(f"unknown person {person_id}")
+        raise typer.Exit(1)
+    log = EventLog(db)
+    gateway = Gateway(cfg, Cassette(cfg.cassette_path), log=log)
+    console = Console()
+    p = people[person_id]
+    console.print(f"[dim]interviewing {p.name} ({p.age}, {p.occupation})...[/dim]")
+    answer = _interview(log, gateway, block, people, person_id, question, ghost=ghost)
+    console.print(f"[bold]{p.name}:[/bold] {answer}")
 
 
 @app.command()
