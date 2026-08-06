@@ -223,6 +223,61 @@ def serve(
 
 
 @app.command()
+def compile(
+    text: str = typer.Argument(help="free-text scenario, e.g. 'the city DM was killed in broad daylight near Shaniwar Wada on day 2 at noon'"),
+    day: int = typer.Option(0, help="default day if the text names none"),
+    save: str = typer.Option(None, help="append the compiled injection to this scenario JSON"),
+    seed: int = typer.Option(None),
+    households: int = typer.Option(80),
+) -> None:
+    """Compile free text into a grounded, validated injection (V2)."""
+    from pathlib import Path
+
+    import orjson
+    from rich.console import Console
+
+    from punesim import config
+    from punesim.llm import Cassette, Gateway
+    from punesim.minds.compiler import CompileError, compile_injection
+    from punesim.population import synthesize
+    from punesim.world.block import Block
+
+    cfg = config.from_env()
+    run_seed = seed if seed is not None else cfg.run_seed
+    block = Block.load()
+    _, people = synthesize(run_seed, block, n_households=households)
+    gateway = Gateway(cfg, Cassette(cfg.cassette_path))
+    console = Console()
+    try:
+        out = compile_injection(gateway, block, people, text, default_day=day)
+    except CompileError as e:
+        console.print("[red]could not compile:[/red]")
+        for err in e.errors:
+            console.print(f"  - {err}")
+        raise typer.Exit(1) from e
+    console.rule("[bold]compiled injection")
+    console.print(out.preview)
+    if save:
+        path = Path(save)
+        existing = orjson.loads(path.read_bytes()) if path.exists() else []
+        inj = out.injection
+        obj = {
+            "day": inj.day,
+            "time": f"{inj.time_s // 3600:02d}:{inj.time_s % 3600 // 60:02d}",
+            "type": inj.type,
+            "place": inj.place,
+            "participants": list(inj.participants),
+            "severity": inj.severity,
+            "payload": inj.payload,
+        }
+        existing.append(obj)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(orjson.dumps(existing, option=orjson.OPT_INDENT_2))
+        console.print(f"\nappended to {save}  ({len(existing)} injection(s)) — run it with:")
+        console.print(f"  punesim run --days {max(inj.day + 2, 3)} --scenes --inject {save} --db runs/dev/events.db")
+
+
+@app.command()
 def doctor() -> None:
     """Check environment: keys present, mode, models, cassette path."""
     from punesim import config

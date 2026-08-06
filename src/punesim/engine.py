@@ -381,13 +381,23 @@ def _info_pass(
 
     by_type = {c[0]: c for c in hazards_mod.CLASSES}
     for e in today:
-        if not e.type.startswith("hazard.") or not e.payload.get("place"):
+        # percept sources: any hazard, plus any user-injected PLACED event that
+        # is not itself information — a public assassination, a procession, a
+        # collapse all ripple through the same witness->gossip lane with zero
+        # event-specific code (novelty ladder, architecture §9.4)
+        is_hazard = e.type.startswith("hazard.")
+        is_public = e.provenance == "user" and not e.type.startswith("info.")
+        if not (is_hazard or is_public) or not e.payload.get("place"):
             continue
         cls = by_type.get(e.type)
         shape = cls[3] if cls else "point"
         predicate = cls[4] if cls else e.type.rsplit(".", 1)[-1]
         topics = cls[5] if cls else ("safety",)
-        charge = cls[6] if cls else 0.7
+        if cls:
+            charge = cls[6]
+        else:
+            sev = e.payload.get("severity")
+            charge = min(1.0, 0.45 + 0.5 * float(sev)) if sev is not None else 0.7
         participants = tuple(e.payload.get("participants") or [])
         qty = float(len(participants)) if participants else None
         claim = hazards_mod.hazard_claim(

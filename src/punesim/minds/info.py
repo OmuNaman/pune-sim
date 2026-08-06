@@ -122,7 +122,8 @@ _PREDICATE_PHRASE = {
 def render_text(claim: Claim, block: Block) -> str:
     place = block.get(claim.subject)
     subject = place.name if place and place.name else claim.subject
-    body = _PREDICATE_PHRASE.get(claim.predicate, "something happened at {subject}").format(subject=subject)
+    fallback = f"there was {'an' if claim.predicate[:1] in 'aeiou' else 'a'} {claim.predicate.replace('_', ' ')} at {{subject}}"
+    body = _PREDICATE_PHRASE.get(claim.predicate, fallback).format(subject=subject)
     if claim.quantity is not None:
         unit = claim.unit or ""
         qty = int(claim.quantity) if float(claim.quantity).is_integer() else round(claim.quantity, 1)
