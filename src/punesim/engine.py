@@ -721,20 +721,28 @@ def run_simulation(
             if inj.day != day:
                 continue
             t_abs = day * SECONDS_PER_DAY + inj.time_s
-            inj_seq = log.commit(
-                [
-                    EventIn(
-                        type=inj.type,
-                        sim_time=t_abs,
-                        payload={
-                            "place": inj.place,
-                            "participants": list(inj.participants),
-                            "severity": inj.severity,
-                            **inj.payload,
-                        },
-                        provenance="user",
+            payload = {
+                "place": inj.place,
+                "participants": list(inj.participants),
+                "severity": inj.severity,
+                **inj.payload,
+            }
+            if inj.type.startswith("info.") and isinstance(payload.get("claim"), dict):
+                # A scenario author writes the claim's SHAPE (subject, predicate,
+                # charge); the narrator text is rendered from it. Committing the
+                # bare spec left the injection event reading "A rumor starts: ''"
+                # everywhere it was shown.
+                spec = dict(payload["claim"])
+                if not spec.get("text"):
+                    c = info_mod.Claim.from_payload(
+                        {**spec, "key": spec.get("key", f"cl:injected:d{day}"),
+                         "subject": spec.get("subject", inj.place or ""),
+                         "predicate": spec.get("predicate", "dangerous"), "text": ""}
                     )
-                ]
+                    spec["text"] = info_mod.render_text(c, block)
+                payload["claim"] = spec
+            inj_seq = log.commit(
+                [EventIn(type=inj.type, sim_time=t_abs, payload=payload, provenance="user")]
             )[0]
             total += 1
             if inj.type.startswith("info."):
