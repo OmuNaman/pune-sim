@@ -93,6 +93,20 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
     if t == "pressure.crossed":
         dim = {"p_health": "health", "p_financial": "money"}.get(p.get("pressure"), p.get("pressure"))
         return f"{nm(p.get('person'))}'s {dim} worries are mounting"
+    if t == "hospital.discharged":
+        return f"{nm(p.get('person'))} discharged from {nm(p.get('place'))} — bill ₹{int(p.get('bill') or 0)}"
+    if t == "money.paid":
+        return f"{p.get('household', '?')} pays ₹{int(p.get('amount') or 0)} ({p.get('reason', '')})"
+    if t == "loan.taken":
+        return f"{p.get('household', '?')} borrows ₹{int(p.get('principal') or 0)} from the moneylender"
+    if t == "loan.interest":
+        return f"{p.get('household', '?')}: interest ₹{int(p.get('amount') or 0)} added, ₹{int(p.get('outstanding') or 0)} outstanding"
+    if t == "police.fir.registered":
+        return f"{nm(p.get('complainant'))} registers an FIR at {nm(p.get('station'))}: “{p.get('statement', '')}”"
+    if t == "fir.update":
+        return f"Police: {p.get('status', '')} ({nm(p.get('victim'))}'s case)"
+    if t == "scene.skipped":
+        return f"(scene skipped for {p.get('household')}: {p.get('reason', '')[:60]})"
     if t == "hazard.water.supply_cut":
         return f"Water supply cut around {nm(p.get('place'))}"
     if t == "hazard.power.outage":
@@ -266,8 +280,9 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> Fas
                     "question": pl.get("question", ""), "answer": pl.get("answer", ""),
                 })
             touched = {pl.get("person"), pl.get("sender"), pl.get("entity_id"),
+                       pl.get("complainant"), pl.get("victim"),
                        *(pl.get("recipients") or []), *(pl.get("participants") or [])}
-            if pid in touched and e.type != "llm.response":
+            if (pid in touched or pl.get("household") == p.household_id and e.type.startswith(("money", "loan"))) and e.type != "llm.response":
                 lines.append({
                     "seq": e.seq, "t": e.sim_time, "day": e.sim_time // SECONDS_PER_DAY,
                     "hm": to_datetime(e.sim_time).strftime("%H:%M"),

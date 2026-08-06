@@ -87,6 +87,27 @@ def _humanize(e_type: str, payload: dict, block: Block) -> str:
         return f"{payload.get('person', '?')} is staying home today, avoiding {pname(payload.get('place', ''))} because of what they heard"
     if e_type == "pressure.crossed":
         return f"{payload.get('person', '?')}: {payload.get('pressure', '')} worry has crossed a threshold ({payload.get('value', '')})"
+    if e_type == "hospital.discharged":
+        return (
+            f"{payload.get('person', '?')} discharged from {pname(payload.get('place', ''))} — "
+            f"hospital bill ₹{int(payload.get('bill') or 0)}"
+        )
+    if e_type == "money.paid":
+        return f"the household paid ₹{int(payload.get('amount') or 0)} ({payload.get('reason', '')})"
+    if e_type == "loan.taken":
+        return (
+            f"the family had to borrow ₹{int(payload.get('principal') or 0)} from a moneylender "
+            f"at {int(float(payload.get('monthly_rate') or 0.03) * 100)}% per month"
+        )
+    if e_type == "loan.interest":
+        return f"moneylender interest added ₹{int(payload.get('amount') or 0)} — ₹{int(payload.get('outstanding') or 0)} now outstanding"
+    if e_type == "police.fir.registered":
+        return (
+            f"{payload.get('complainant', '?')} registered an FIR at {pname(payload.get('station', ''))}"
+            f" — statement: \"{payload.get('statement', '')}\""
+        )
+    if e_type == "fir.update":
+        return f"police update on the case: {payload.get('status', '')}"
     return f"{e_type}: { {k: v for k, v in payload.items() if k != 'wall'} }"
 
 
@@ -97,10 +118,12 @@ def recent_notable_events(
     block: Block,
     limit: int = 12,
     until: int | None = None,
+    household_id: str | None = None,
 ) -> list[str]:
     """Non-routine events from yesterday onward that touch any member.
     `until` bounds the scene's knowledge to its own sim-time — a 06:30 scene
-    must never see a 07:20 event that is already committed to the log."""
+    must never see a 07:20 event that is already committed to the log.
+    `household_id` also matches household-addressed events (bills, loans)."""
     since = max(0, (day - 1) * SECONDS_PER_DAY)
     out: list[str] = []
     for e in log.events():
@@ -110,13 +133,15 @@ def recent_notable_events(
             continue
         touched = set()
         p = e.payload
-        for key in ("person", "sender"):
+        for key in ("person", "sender", "complainant", "victim"):
             if p.get(key):
                 touched.add(p[key])
         touched.update(p.get("recipients", []) or [])
         touched.update(p.get("participants", []) or [])
         if p.get("entity_id"):
             touched.add(p["entity_id"])
+        if household_id is not None and p.get("household") == household_id:
+            touched |= member_ids
         if touched & member_ids:
             when = to_datetime(e.sim_time).strftime("%a %H:%M")
             out.append(f"- {when}: {_humanize(e.type, p, block)}")
@@ -340,7 +365,7 @@ def run_morning_scenes(
     sim_time = day * SECONDS_PER_DAY + SCENE_HOUR_S
     for hid in chosen_ids:
         hh = by_id[hid]
-        recent = recent_notable_events(log, set(hh.member_ids), day, block, until=sim_time)
+        recent = recent_notable_events(log, set(hh.member_ids), day, block, until=sim_time, household_id=hid)
         msgs = build_messages(block, hh, people, day, recent)
         try:
             res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
@@ -373,7 +398,9 @@ def run_reaction_scene(
 ) -> SceneResult:
     """T2 event-driven scene: the household reacts the moment it learns —
     the mid-day lane the morning gate cannot provide (09 break B9, V0-thin)."""
-    recent = recent_notable_events(log, set(household.member_ids), day, block, until=now_abs)
+    recent = recent_notable_events(
+        log, set(household.member_ids), day, block, until=now_abs, household_id=household.id
+    )
     msgs = build_reaction_messages(block, household, people, day, recent, now_abs)
     res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=now_abs)
     seq = apply_delta(

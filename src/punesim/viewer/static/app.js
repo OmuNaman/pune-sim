@@ -55,6 +55,9 @@ const KIND_COLOR = {
   "hazard.fire.small": "var(--danger)", "info.heard": "var(--rumor)",
   "belief.action": "var(--rumor)", "plan.avoided": "var(--rumor)",
   "pressure.crossed": "var(--mood)", "info.rumor": "var(--rumor)",
+  "hospital.discharged": "var(--danger)", "money.paid": "var(--mood)",
+  "loan.taken": "var(--mood)", "loan.interest": "var(--mood)",
+  "police.fir.registered": "var(--phone)", "fir.update": "var(--phone)",
 };
 
 /* Linkify known person names inside humanized sentences. */

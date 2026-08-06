@@ -16,6 +16,7 @@ Two runs from the same seed + same cassettes are hash-identical.
 
 from dataclasses import dataclass, field, replace
 
+from .institutions import procedures as proc_mod
 from .kernel.attention import AttentionField
 from .kernel.facts import Canon, PredicateRegistry, core_registry
 from .kernel.log import EventIn, EventLog
@@ -233,6 +234,40 @@ class SimState:
     pressures: dict = field(default_factory=dict)  # person -> {p_health, p_financial}
     fired: dict = field(default_factory=dict)  # (person, pressure) -> day (hysteresis)
     gate_marks: dict = field(default_factory=dict)  # household -> reason for tomorrow's scene
+    proc: proc_mod.ProcState = field(default_factory=proc_mod.ProcState)  # V2 institutions
+    pending: dict = field(default_factory=dict)  # future_day -> [TimedEvent] (procedure futures)
+
+
+def _apply_stays(
+    timed: list[_Timed], people: dict[str, Person], state: SimState, day: int, skip: set[str]
+) -> list[_Timed]:
+    """Hospital stays and convalescence bend the clockwork: an admitted person
+    spends the day in the ward; a discharged one rests at home until fit.
+    Scene-revised plans (skip) win, as everywhere."""
+    base = day * SECONDS_PER_DAY
+    replaced: dict[str, TimedEvent] = {}
+    for pid in sorted(state.proc.in_hospital):
+        until, place = state.proc.in_hospital[pid]
+        if day < until and pid in people and pid not in skip:
+            replaced[pid] = TimedEvent(
+                base + 8 * 3600, "activity.start",
+                {"person": pid, "at": place or people[pid].home_id, "activity": "admitted"},
+            )
+    for pid in sorted(state.proc.rest):
+        if pid in replaced or pid in skip or pid not in people:
+            continue
+        if day < state.proc.rest[pid] and day >= state.proc.in_hospital.get(pid, (0, ""))[0]:
+            replaced[pid] = TimedEvent(
+                base + 8 * 3600, "activity.start",
+                {"person": pid, "at": people[pid].home_id, "activity": "rest_at_home"},
+            )
+    if not replaced:
+        return timed
+    timed = [x for x in timed if not (x[1] in replaced and x[4] == "clockwork")]
+    for pid in sorted(replaced):
+        te = replaced[pid]
+        timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    return timed
 
 
 def _apply_beliefs(
@@ -287,6 +322,7 @@ def _pressure_tick(
     hh_members: dict[str, tuple[str, ...]],
     day: int,
     today: list,
+    p_fin_override: dict[str, float] | None = None,
 ) -> tuple[list[EventIn], dict[str, str]]:
     """E2 lane: two integrators, vectorless V1 arithmetic. Injury raises
     p_health; a missed work day (or a household admission's bills) raises
@@ -312,7 +348,10 @@ def _pressure_tick(
             pr["p_health"] = min(1.0, max(pr["p_health"], 0.3 + 0.6 * injured[pid]))
         else:
             pr["p_health"] = 0.1 + (pr["p_health"] - 0.1) * 0.96
-        if p.occupation not in NO_WORK and p.occupation != "student" and p.age >= 18:
+        if p_fin_override is not None:
+            if pid in p_fin_override:  # V2: the ledger is the truth
+                pr["p_financial"] = p_fin_override[pid]
+        elif p.occupation not in NO_WORK and p.occupation != "student" and p.age >= 18:
             hh_admitted = any(
                 q in admitted for q in hh_members.get(hh_of_person.get(pid, ""), ())
             )
@@ -468,6 +507,11 @@ def run_simulation(
     from .minds.scene import compile_plan_overrides, run_morning_scenes, run_reaction_scene
 
     state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
+    state.proc.finances = proc_mod.init_finances(run_seed, households, people)
+    for p in people.values():  # a poor family STARTS worried — being born poor
+        f = state.proc.finances.get(p.household_id)  # is not an E2 event
+        if f is not None and p.age >= 18:
+            state.pressures[p.id] = {"p_health": 0.1, "p_financial": proc_mod.p_financial(f)}
     total = 0
     hh_of_person = {p.id: p.household_id for p in people.values()}
     hh_by_id = {h.id: h for h in households}
@@ -496,9 +540,10 @@ def run_simulation(
             total += len(results)
         state.gate_marks.clear()
 
-        # 2. compile the day (scene plans win; beliefs bend the rest)
+        # 2. compile the day (scene plans win; beliefs and bodies bend the rest)
         timed = _compile_day(run_seed, block, people, day, overrides)
         timed = _apply_beliefs(timed, people, state, day, skip=set(overrides))
+        timed = _apply_stays(timed, people, state, day, skip=set(overrides))
 
         # 3. injections (committed now, AFTER morning scenes — a 06:30 scene
         #    must not see a 07:20 event) + stub reactions + reaction triggers
@@ -575,7 +620,9 @@ def run_simulation(
                     if gateway is not None:
                         reactions[hid] = max(reactions.get(hid, 0), hz.t_abs + REACTION_DELAY_S)
 
-        # 5. invalidate + commit (split when a family reacts mid-day)
+        # 5. the institutions' scheduled futures land today (discharges, FIRs,
+        #    healing stages), then invalidate + commit (split on reactions)
+        extra_cw.extend(state.pending.pop(day, []))
         timed = _apply_admissions(timed, extra + extra_cw)
         for te in extra:
             timed.append((te.sim_time, "~injected", te.type, te, "user"))
@@ -629,10 +676,23 @@ def run_simulation(
         total += n_heard
         state.gate_marks.update(info_marks)
 
-        # 7. E2: nightly pressure tick with hysteresis
+        # 7. V2 institutions: procedures schedule their futures, money moves
         day0, day1 = day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY
         today = [e for e in log.events() if day0 <= e.sim_time < day1]
-        p_events, p_marks = _pressure_tick(state, people, hh_of_person, hh_members, day, today)
+        new_pending = proc_mod.step(today, state.proc, run_seed, day, block, people, state.info)
+        for d, tes in new_pending.items():
+            state.pending.setdefault(d, []).extend(tes)
+        fin_events, p_fin = proc_mod.daily_finance_tick(state.proc, day, people, today)
+        for te, caused_by in fin_events:
+            log.commit([EventIn(type=te.type, sim_time=te.sim_time, payload=te.payload,
+                                caused_by=caused_by, provenance="clockwork")])
+            total += 1
+
+        # 8. E2: nightly pressure tick with hysteresis (p_financial now reads
+        #    the real ledger instead of bump arithmetic)
+        p_events, p_marks = _pressure_tick(
+            state, people, hh_of_person, hh_members, day, today, p_fin_override=p_fin
+        )
         if p_events:
             total += len(log.commit(p_events))
         state.gate_marks.update(p_marks)
