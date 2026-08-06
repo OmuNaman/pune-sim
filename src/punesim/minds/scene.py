@@ -69,7 +69,7 @@ _ROUTINE_TYPES = {"trip.start", "trip.end", "activity.start"}
 # re-formed on Monday, word for word. Memory is read back deliberately by
 # memory_digest(); it never leaks in through here.
 _SELF_OUTPUT_TYPES = frozenset({
-    "scene.morning", "scene.reaction", "scene.skipped",
+    "scene.morning", "scene.reaction", "scene.skipped", "scene.invalid_ref",
     "memory.formed", "mood.delta", "plan.revised",
 })
 
@@ -421,8 +421,25 @@ def apply_delta(
     sim_time: int,
     disclosure_tier: int = 0,
     event_type: str = "scene.morning",
+    people: dict[str, Person] | None = None,
 ) -> int:
     """Commit the scene and its consequences; returns the scene event seq."""
+    # Referential integrity at the gate. Nothing validated the person ids a
+    # scene returned, and the soak quietly accumulated messages addressed to
+    # `person:colleague_yogita`, `person:Vinayak Mane` and `person:neighbor` —
+    # people who do not exist. A dangling id is dropped and recorded, never
+    # committed: the registry is canon, and a scene does not get to extend it.
+    dropped: list[str] = []
+
+    def known(pid: str | None) -> bool:
+        if people is None or not pid:
+            return True
+        norm = pid if pid.startswith(("person:", "place:", "home:", "org:")) else f"person:{pid}"
+        if norm in people or norm.startswith(("place:", "home:", "org:")):
+            return True
+        dropped.append(pid)
+        return False
+
     scene_seq = log.commit(
         [
             EventIn(
@@ -440,6 +457,8 @@ def apply_delta(
 
     batch: list[EventIn] = []
     for m in delta.memory_writes:
+        if not known(m.person_id):
+            continue
         batch.append(
             EventIn(
                 type="memory.formed",
@@ -450,6 +469,8 @@ def apply_delta(
             )
         )
     for md in delta.mood_deltas:
+        if not known(md.person_id):
+            continue
         batch.append(
             EventIn(
                 type="mood.delta",
@@ -460,13 +481,16 @@ def apply_delta(
             )
         )
     for msg in delta.messages:
+        recipients = [r for r in msg.recipients if known(r)]
+        if not known(msg.sender) or (msg.recipients and not recipients):
+            continue
         batch.append(
             EventIn(
                 type="message.sent",
                 sim_time=sim_time,
                 payload={
                     "sender": msg.sender,
-                    "recipients": msg.recipients,
+                    "recipients": recipients,
                     "channel": msg.channel,
                     "text": msg.text,
                 },
@@ -489,6 +513,8 @@ def apply_delta(
             )
         )
     for c in delta.conditions:
+        if not known(c.entity_id):
+            continue
         batch.append(
             EventIn(
                 type="condition.set",
@@ -515,6 +541,16 @@ def apply_delta(
                 },
                 caused_by=scene_seq,
                 provenance="llm_scene",
+            )
+        )
+    if dropped:
+        batch.append(
+            EventIn(
+                type="scene.invalid_ref",
+                sim_time=sim_time,
+                payload={"household": household_id, "ids": sorted(set(dropped))},
+                caused_by=scene_seq,
+                provenance="system",
             )
         )
     if batch:
@@ -589,7 +625,8 @@ def run_morning_scenes(
             )])
             continue
         seq = apply_delta(
-            log, canon, registry, res.parsed, household_id=hid, sim_time=sim_time
+            log, canon, registry, res.parsed, household_id=hid, sim_time=sim_time,
+            people=people,
         )
         results.append(SceneResult(household_id=hid, delta=res.parsed, scene_seq=seq))
     return results
@@ -621,5 +658,6 @@ def run_reaction_scene(
     seq = apply_delta(
         log, canon, registry, res.parsed,
         household_id=household.id, sim_time=now_abs, event_type="scene.reaction",
+        people=people,
     )
     return SceneResult(household_id=household.id, delta=res.parsed, scene_seq=seq)

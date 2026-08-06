@@ -307,3 +307,38 @@ def test_a_witnessed_event_keeps_its_hour_forever(tmp_path, world):
     facts = witnessed_facts(log, set(hh.member_ids), 5, block, people=people)
     assert facts, "a witnessed fire vanished from the context after two days"
     assert any("14:" in f and "days ago" in f for f in facts)
+
+
+def test_a_scene_cannot_invent_a_person(tmp_path, world):
+    """The registry is canon and a scene does not get to extend it. The soak
+    quietly accumulated messages addressed to person:colleague_yogita,
+    person:Vinayak Mane and person:neighbor — people who do not exist."""
+    block, hhs, people = world
+    hh = hhs[0]
+    real = hh.member_ids[0]
+    t = ScriptedTransport([
+        _delta(
+            memory_writes=[
+                {"person_id": real, "salience": 0.5, "summary": "a real memory"},
+                {"person_id": "person:ghost_auntie", "salience": 0.9, "summary": "invented"},
+            ],
+            messages=[
+                {"sender": real, "recipients": ["person:neighbor"],
+                 "channel": "phone", "text": "to nobody"},
+                {"sender": real, "recipients": [hh.member_ids[-1]],
+                 "channel": "talk", "text": "to someone real"},
+            ],
+        ),
+    ])
+    log = EventLog(tmp_path / "ghost.db")
+    gw = Gateway(_cfg(tmp_path), Cassette(tmp_path / "c.db"), transport=t, log=log)
+    engine.run_simulation(
+        log, SEED, block, hhs, people, days=1, gateway=gw, scenes_k=1,
+    )
+    mems = [e.payload["person"] for e in log.events(type="memory.formed")]
+    assert real in mems and "person:ghost_auntie" not in mems
+    msgs = [e.payload for e in log.events(type="message.sent")]
+    assert len(msgs) == 1 and msgs[0]["text"] == "to someone real"
+    rejected = list(log.events(type="scene.invalid_ref"))
+    assert rejected, "invented ids were dropped silently"
+    assert set(rejected[0].payload["ids"]) == {"person:ghost_auntie", "person:neighbor"}
