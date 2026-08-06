@@ -28,6 +28,7 @@ def run(
     k: int = typer.Option(5, help="Households per morning under the spotlight gate"),
     inject: str = typer.Option(None, help="JSON file of injections [{day,time,type,place,participants,severity}]"),
     hazards: bool = typer.Option(True, "--hazards/--no-hazards", help="Sample random hazards (V1 un-injected ripples)"),
+    follow: list[str] = typer.Option(None, "--follow", help="Household or person id to render every day (repeatable)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
@@ -62,13 +63,15 @@ def run(
         log, run_seed, block, hhs, people,
         days=days, gateway=gateway, scenes_k=k,
         scene_gate_mode=cfg.scene_gate_mode, injections=injections,
-        hazards=hazards,
+        hazards=hazards, follow=tuple(follow or ()),
     )
     typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}")
     typer.echo(f"events committed : {n} over {days} day(s)"
                + (f"  (scenes on, k={k}, gate={cfg.scene_gate_mode})" if scenes else "  (zero LLM)"))
     if injections:
         typer.echo(f"injections       : {len(injections)}")
+    if follow:
+        typer.echo(f"following        : {', '.join(follow)}")
     typer.echo(f"determinism hash : {log.determinism_hash()}")
     typer.echo(f"log              : {path}")
 

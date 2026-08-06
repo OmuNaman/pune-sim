@@ -582,6 +582,7 @@ def run_simulation(
     scene_gate_mode: str = "spotlight",
     injections: list[Injection] | None = None,
     hazards: bool = False,
+    follow: tuple[str, ...] = (),
 ) -> tuple[int, SimState]:
     """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
     + sampled hazards -> split-commit with reaction scenes -> INFO propagation
@@ -606,6 +607,11 @@ def run_simulation(
     hh_by_id = {h.id: h for h in households}
     hh_members = {h.id: h.member_ids for h in households}
     worksites = roaming_worksites(run_seed, block, people)
+    for ref in follow:  # a followed family renders every day, whatever else happens
+        hid = ref if ref in hh_by_id else hh_of_person.get(ref)
+        if hid is None:
+            raise ValueError(f"--follow: no such household or person: {ref}")
+        state.attention.set_focus(hid, 10.0)
 
     for day in range(start_day, start_day + days):
         # 1. T1 morning scenes — routine-bypass gate: households marked by
@@ -616,16 +622,22 @@ def run_simulation(
             if scene_gate_mode == "all":
                 chosen = all_ids
             else:
-                gated = [h for h in sorted(state.gate_marks) if h in hh_by_id]
-                fill = [
-                    h for h in state.attention.top_k(all_ids, scenes_k, tick=day * 288)
-                    if h not in gated
+                focused = [h for h in state.attention.focused() if h in hh_by_id]
+                gated = [
+                    h for h in sorted(state.gate_marks)
+                    if h in hh_by_id and h not in focused
                 ]
-                chosen = (gated + fill)[: max(scenes_k, len(gated))]
+                fill = [
+                    h for h in state.attention.top_k(all_ids, scenes_k, tick=day * 288, day=day)
+                    if h not in gated and h not in focused
+                ]
+                chosen = (focused + gated + fill)[: max(scenes_k, len(focused) + len(gated))]
             results = run_morning_scenes(
                 log, gateway, state.canon, state.registry, block, households, people, day,
                 chosen_ids=chosen,
             )
+            for hid in chosen:  # a spent slot counts, skipped scenes included
+                state.attention.mark_rendered(hid, day)
             overrides = compile_plan_overrides(results, people, day)
             total += len(results)
         state.gate_marks.clear()
@@ -683,6 +695,7 @@ def run_simulation(
                 if hid is None:
                     continue
                 state.attention.bump(hid, 5.0, tick=day * 288)
+                state.gate_marks[hid] = "hazard"  # a bump alone decays overnight
                 if gateway is not None:
                     reactions[hid] = max(reactions.get(hid, 0), t_abs + REACTION_DELAY_S)
 
@@ -715,6 +728,7 @@ def run_simulation(
                     if hid is None:
                         continue
                     state.attention.bump(hid, 3.0, tick=day * 288)
+                    state.gate_marks[hid] = "hazard"  # tomorrow's scene, guaranteed
                     if gateway is not None:
                         reactions[hid] = max(reactions.get(hid, 0), hz.t_abs + REACTION_DELAY_S)
 
