@@ -25,6 +25,8 @@ small daily texture (chai, tiffin, water timing, school bags). Characters speak 
 Marathi/Hindi/English code-mix is welcome. The narration voice is neutral and never attributes
 behavior or traits to any community; no slurs anywhere. If RECENT EVENTS contains something
 serious, the family responds like a real family — worry, phone calls, changed plans.
+If someone "heard" a rumor, they repeat it in their own words at their stated belief level —
+a 40% believer is skeptical, a 90% believer acts on it; family members may argue about it.
 Output ONLY one JSON object; all fields optional, no extra fields:
 {"narration": "2-4 sentences",
  "transcript": "Name: line\\nName: line  (4-12 lines; speaker labels are given names like 'Madhura:', never ids)",
@@ -67,6 +69,24 @@ def _humanize(e_type: str, payload: dict, block: Block) -> str:
         return f"ambulance reached {pname(payload.get('place', ''))}"
     if e_type == "condition.set":
         return f"{payload.get('entity_id', '?')}: {payload.get('kind', '?')} (severity {payload.get('intensity', '?')})"
+    if e_type == "info.heard":
+        claim = payload.get("claim", {})
+        how = {"witness": "saw it themselves", "household": "heard at home", "phone": "heard by phone"}.get(
+            payload.get("channel", ""), f"heard from {payload.get('source', 'someone')}"
+        )
+        return (
+            f"{payload.get('person', '?')} {how} — \"{claim.get('text', '')}\""
+            f" (believes it {int(float(payload.get('credence', 0)) * 100)}%)"
+        )
+    if e_type == "belief.action":
+        return (
+            f"{payload.get('person', '?')} now acts on the rumor '{payload.get('claim_key', '')}':"
+            f" {payload.get('action', '')} re {pname(payload.get('place', ''))}"
+        )
+    if e_type == "plan.avoided":
+        return f"{payload.get('person', '?')} is staying home today, avoiding {pname(payload.get('place', ''))} because of what they heard"
+    if e_type == "pressure.crossed":
+        return f"{payload.get('person', '?')}: {payload.get('pressure', '')} worry has crossed a threshold ({payload.get('value', '')})"
     return f"{e_type}: { {k: v for k, v in payload.items() if k != 'wall'} }"
 
 

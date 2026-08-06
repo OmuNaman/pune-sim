@@ -74,7 +74,7 @@ def test_injection_stub_reactions_and_attention(tmp_path, world):
         place=block.places[0].id, participants=(student.id,), severity=0.7,
     )
     log = EventLog(tmp_path / "inj.db")
-    n, state = engine.run_simulation(
+    _n, state = engine.run_simulation(
         log, SEED, block, hhs, people, days=1, injections=[inj]
     )
     types = [e.type for e in log.events() if e.provenance == "user"]
@@ -89,11 +89,13 @@ def test_injection_stub_reactions_and_attention(tmp_path, world):
     hh = next(h for h in hhs if h.id == student.household_id)
     recent = recent_notable_events(log, set(hh.member_ids), 1, block)
     assert any("admitted" in line for line in recent)
-    # mechanical plan invalidation: the admitted student's day ends at the hospital
+    # mechanical plan invalidation: the admitted student's ROUTINE day ends at
+    # the hospital (INFO-lane events — hearing gossip there — are allowed)
     adm_t = next(e.sim_time for e in log.events(type="hospital.admitted"))
     student_after = [
         e for e in log.events()
         if e.payload.get("person") == student.id and e.sim_time > adm_t
+        and e.type in ("trip.start", "trip.end", "activity.start")
     ]
     assert all(e.type == "activity.start" and e.payload.get("activity") == "admitted"
                for e in student_after)
@@ -163,6 +165,7 @@ def test_reaction_scene_same_day_and_next_morning(tmp_path, world):
         e for e in log.events()
         if e.sim_time < 86400 and e.payload.get("person") == student.id
         and e.sim_time > 8 * 3600 + 25 * 60
+        and e.type in ("trip.start", "trip.end", "activity.start")
     ]
     assert all(e.payload.get("activity") == "admitted" for e in day0_student_after_adm)
 

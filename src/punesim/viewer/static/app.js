@@ -51,6 +51,10 @@ const KIND_COLOR = {
   "message.sent": "var(--phone)", "conversation.held": "var(--scene)",
   "hazard.road.collision": "var(--danger)", "hospital.admitted": "var(--danger)",
   "ambulance.dispatched": "var(--danger)", "condition.set": "var(--danger)",
+  "hazard.water.supply_cut": "var(--danger)", "hazard.power.outage": "var(--danger)",
+  "hazard.fire.small": "var(--danger)", "info.heard": "var(--rumor)",
+  "belief.action": "var(--rumor)", "plan.avoided": "var(--rumor)",
+  "pressure.crossed": "var(--mood)", "info.rumor": "var(--rumor)",
 };
 
 /* Linkify known person names inside humanized sentences. */
@@ -67,10 +71,10 @@ function linkNames(text) {
 
 /* ---------- boot ---------- */
 async function boot() {
-  const [meta, people, places, scenes, ticker] = await Promise.all(
-    ["/api/meta", "/api/people", "/api/places", "/api/scenes", "/api/ticker"].map((u) =>
+  const [meta, people, places, scenes, ticker, rumors] = await Promise.all(
+    ["/api/meta", "/api/people", "/api/places", "/api/scenes", "/api/ticker", "/api/rumors"].map((u) =>
       fetch(u).then((r) => r.json())));
-  Object.assign(state, { meta, people, places, scenes, ticker });
+  Object.assign(state, { meta, people, places, scenes, ticker, rumors });
   for (const p of people) state.byId.set(p.id, p);
   nameIndex = people.map((p) => [p.name, p.id]).sort((a, b) => b[0].length - a[0].length).slice(0, 400);
 
@@ -83,6 +87,7 @@ async function boot() {
   renderRail();
   renderTicker();
   renderScenesPanel();
+  renderRumorsPanel();
   wireControls();
   updateClock();
   refreshPositions();
@@ -350,6 +355,16 @@ async function selectPerson(pid) {
         <div class="memory" title="salience ${m.salience}">“${esc(m.summary)}” <span style="color:var(--fg-faint)">— ${relTime(m.t, now)}</span></div>`).join("") || '<p class="hint">none yet</p>'}</div>
     </details>
 
+    ${d.heard.length ? `
+    <details open><summary>What they've heard (${d.heard.length})</summary>
+      <div class="body">${d.heard.map((hh) => `
+        <div class="heardline" title="hop ${hh.hop}${hh.ops.length ? " · drifted: " + hh.ops.join(", ").toLowerCase() : ""}">
+          <div class="credbar"><div style="width:${Math.round((hh.credence || 0) * 100)}%"></div></div>
+          <div class="heardtxt">“${esc(hh.text)}”
+            <span style="color:var(--fg-faint)">— ${hh.channel === "witness" ? "saw it" : "from " + esc(hh.source)}, ${relTime(hh.t, now)} · believes ${Math.round((hh.credence || 0) * 100)}%</span></div>
+        </div>`).join("")}</div>
+    </details>` : ""}
+
     ${d.interviews.length ? `
     <details open><summary>Interviews (${d.interviews.length})</summary>
       <div class="body">${d.interviews.map((iv) => `
@@ -389,6 +404,61 @@ function renderScenesPanel() {
         }).join("")}
       </div>
     </details>`).join("") || '<p class="hint">no scenes in this log — run with --scenes</p>';
+}
+
+/* ---------- inspector: rumors ---------- */
+function renderRumorsPanel() {
+  const VER = { true: ["true", "ver-true"], false: ["false", "ver-false"],
+    distorted: ["distorted", "ver-dist"], unknown: ["unverified", "ver-unk"] };
+  $("#panel-rumors").innerHTML = (state.rumors || []).slice().reverse().map((r) => {
+    const [vlabel, vcls] = VER[r.veracity] || VER.unknown;
+    const maxN = Math.max(1, ...r.by_day.map((d) => d.n));
+    const spark = r.by_day.map((d) =>
+      `<div class="spark-bar" title="day ${d.day}: heard ${d.n}×" style="height:${Math.max(3, (d.n / maxN) * 26)}px"></div>`).join("");
+    const origin = r.origin_prov === "user" ? "injected"
+      : r.origin_type && r.origin_type.startsWith("hazard.") ? "a real incident" : "word of mouth";
+    return `
+    <details class="rumorcard" open>
+      <summary><span class="ver ${vcls}">${vlabel}</span> “${esc(r.variants[0]?.text || r.key)}”
+        <span class="when">${esc(r.first_hm)}</span></summary>
+      <div class="body">
+        <div class="rumor-stats">
+          <span title="unique people who heard any version">👂 ${r.reach} heard</span>
+          <span title="credence ≥ 55% at last hearing">🧠 ${r.believers} believe</span>
+          <span title="how it started">🌱 ${origin}</span>
+          <div class="spark" title="hearings per day">${spark}</div>
+        </div>
+        ${r.variants.length > 1 ? `
+        <div class="drift">
+          <div class="drift-title">How the story changed</div>
+          ${r.variants.map((v, i) => `
+            <div class="drift-row">
+              <span class="hopn">${i === 0 ? "origin" : "hop " + v.hop}</span>
+              <span class="txt">“${esc(v.text)}”</span>
+              ${v.ops.length ? `<span class="ops">${v.ops.map((o) => `<i>${esc(o.toLowerCase())}</i>`).join("")}</span>` : ""}
+            </div>`).join("")}
+        </div>` : ""}
+        ${r.actions.length ? `
+        <div class="drift">
+          <div class="drift-title">Acting on it</div>
+          ${r.actions.map((a) => `
+            <div class="evline notable"><span class="k" style="background:var(--danger)"></span>
+              <span class="t">${esc(a.hm)}</span>
+              <span class="txt"><a class="plink" data-pid="${a.person_id}" href="#">${esc(a.person)}</a>
+                ${a.action === "store_water" ? "stores water — avoiding" : a.action === "stop_patronage" ? "stops going to" : "now avoids"} ${esc(a.place)}</span></div>`).join("")}
+        </div>` : ""}
+        <details><summary>Every hearing (${r.spread.length})</summary>
+          <div class="body">${r.spread.map((s) => `
+            <div class="evline">
+              <span class="t">${esc(s.hm)}</span>
+              <span class="txt"><a class="plink" data-pid="${s.person_id}" href="#">${esc(s.person)}</a>
+                ${s.channel === "witness" ? "saw it" : s.channel === "household" ? `heard at home from ${esc(s.source)}` : `heard from ${esc(s.source)}`}
+                <span class="cred" title="belief after hearing">${Math.round((s.credence || 0) * 100)}%</span></span>
+            </div>`).join("")}</div>
+        </details>
+      </div>
+    </details>`;
+  }).join("") || '<p class="hint">no rumors yet — inject one (type "info.rumor") or let a hazard start one</p>';
 }
 
 /* ---------- controls ---------- */
@@ -440,12 +510,14 @@ function wireControls() {
       document.querySelectorAll(".panel").forEach((x) =>
         x.classList.toggle("active", x.id === `panel-${tab.dataset.tab}`));
       if (tab.dataset.tab === "scenes") history.replaceState(null, "", "#scenes");
+      if (tab.dataset.tab === "rumors") history.replaceState(null, "", "#rumors");
     }
   });
   addEventListener("resize", drawTimeline);
-  // deep links: #person:000.1 opens a dossier, #scenes opens the scene reader
+  // deep links: #person:000.1 opens a dossier, #scenes / #rumors open readers
   const h = decodeURIComponent(location.hash.slice(1));
   if (h === "scenes") document.querySelector('[data-tab="scenes"]').click();
+  else if (h === "rumors") document.querySelector('[data-tab="rumors"]').click();
   else if (h.startsWith("person:")) selectPerson(h);
 }
 

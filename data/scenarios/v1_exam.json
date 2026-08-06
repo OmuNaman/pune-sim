@@ -1,0 +1,30 @@
+[
+  {
+    "day": 0,
+    "time": "18:30",
+    "type": "info.rumor",
+    "place": "place:node/10172994194",
+    "participants": ["person:001.1", "person:002.3"],
+    "payload": {
+      "credence": 0.85,
+      "claim": {
+        "key": "cl:tulshibaug_water",
+        "subject": "place:node/10172994194",
+        "predicate": "contaminated",
+        "topics": ["water", "health"],
+        "charge": 0.8,
+        "specificity": 0.5,
+        "veracity": "false",
+        "valence": -0.7
+      }
+    }
+  },
+  {
+    "day": 1,
+    "time": "07:20",
+    "type": "hazard.road.collision",
+    "place": "place:node/3681735096",
+    "participants": ["person:000.2"],
+    "severity": 0.6
+  }
+]

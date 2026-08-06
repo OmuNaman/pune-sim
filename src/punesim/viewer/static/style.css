@@ -5,6 +5,7 @@
   --accent: #e8a33d;            /* haldi */
   --trip: #4a9eff; --scene: #a78bfa; --mood: #fbbf24;
   --danger: #ef4444; --phone: #2dd4bf; --memory: #f472b6;
+  --rumor: #34d399;             /* whisper green */
   --radius: 8px;
   font-size: 14px;
 }
@@ -143,6 +144,39 @@ details details { margin: 4px 0; border-style: dashed; }
 .mood-pos { color: #4ade80; } .mood-neg { color: var(--danger); }
 .raw { font-family: ui-monospace, Consolas, monospace; font-size: .72em; color: var(--fg-faint);
   white-space: pre-wrap; word-break: break-all; }
+
+/* ---- rumors ---- */
+.rumorcard { margin-bottom: 10px; }
+.rumorcard summary { flex-wrap: wrap; }
+.rumorcard summary .when { color: var(--fg-faint); font-weight: 400; margin-left: auto; }
+.ver { font-size: .68em; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 7px; border-radius: 10px; flex: 0 0 auto; }
+.ver-true { background: #14532d; color: #86efac; }
+.ver-false { background: #58151c; color: #fca5a5; }
+.ver-dist { background: #543a0c; color: #fcd34d; }
+.ver-unk { background: var(--bg3); color: var(--fg-dim); }
+.rumor-stats { display: flex; gap: 14px; align-items: flex-end; font-size: .82em;
+  color: var(--fg-dim); margin: 6px 0 10px; flex-wrap: wrap; }
+.spark { display: flex; gap: 2px; align-items: flex-end; height: 26px; margin-left: auto; }
+.spark-bar { width: 9px; background: var(--rumor); opacity: .75; border-radius: 2px 2px 0 0; }
+.drift { margin: 8px 0; }
+.drift-title { font-size: .75em; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--fg-faint); margin-bottom: 4px; }
+.drift-row { display: flex; gap: 8px; padding: 3px 0; font-size: .85em; align-items: baseline; }
+.drift-row .hopn { flex: 0 0 46px; color: var(--rumor); font-size: .8em;
+  font-variant-numeric: tabular-nums; }
+.drift-row .txt { color: var(--fg-dim); }
+.drift-row:first-of-type .txt { color: var(--fg); }
+.drift-row .ops i { font-style: normal; font-size: .7em; background: var(--bg3);
+  border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; margin-left: 3px;
+  color: var(--mood); }
+.cred { font-size: .75em; color: var(--rumor); margin-left: 4px;
+  font-variant-numeric: tabular-nums; }
+.heardline { margin: 7px 0; }
+.credbar { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden;
+  margin-bottom: 3px; }
+.credbar > div { height: 100%; background: var(--rumor); }
+.heardtxt { font-size: .85em; color: var(--fg-dim); }
 
 @media (prefers-reduced-motion: reduce) {
   .pulse, .tick { animation: none; }

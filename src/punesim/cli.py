@@ -27,6 +27,7 @@ def run(
     scenes: bool = typer.Option(False, "--scenes", help="Fire LLM morning scenes (uses .env key)"),
     k: int = typer.Option(5, help="Households per morning under the spotlight gate"),
     inject: str = typer.Option(None, help="JSON file of injections [{day,time,type,place,participants,severity}]"),
+    hazards: bool = typer.Option(True, "--hazards/--no-hazards", help="Sample random hazards (V1 un-injected ripples)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
@@ -61,6 +62,7 @@ def run(
         log, run_seed, block, hhs, people,
         days=days, gateway=gateway, scenes_k=k,
         scene_gate_mode=cfg.scene_gate_mode, injections=injections,
+        hazards=hazards,
     )
     typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}")
     typer.echo(f"events committed : {n} over {days} day(s)"

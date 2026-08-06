@@ -14,7 +14,7 @@ Day pipeline:
 Two runs from the same seed + same cassettes are hash-identical.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .kernel.attention import AttentionField
 from .kernel.facts import Canon, PredicateRegistry, core_registry
@@ -22,11 +22,21 @@ from .kernel.log import EventIn, EventLog
 from .kernel.timebase import SECONDS_PER_DAY
 from .kernel.worlddelta import PlanStep
 from .llm.gateway import Gateway
+from .minds import info as info_mod
 from .population.synth import Household, Person
+from .world import hazards as hazards_mod
 from .world.block import Block
 from .world.schedule import TimedEvent, day_events
 
 REACTION_DELAY_S = 35 * 60  # the family reacts ~35 min after the event (post phone call)
+
+# --- V1 pressure integrators (03-cognition §1.2, two of six) ----------------
+DAILY_WAGE = {"rickshaw_driver", "domestic_worker", "shop_assistant", "tailor", "cook"}
+NO_WORK = {"homemaker", "retired", "infant"}
+P_THRESHOLD = 0.6
+HYSTERESIS = 0.15
+HYSTERESIS_DAYS = 20
+_ROUTINE_TYPES = ("trip.start", "trip.end", "activity.start")
 
 # (sim_time, person_key, type, event, provenance)
 _Timed = tuple[int, str, str, TimedEvent, str]
@@ -216,6 +226,215 @@ class SimState:
     canon: Canon
     registry: PredicateRegistry
     attention: AttentionField
+    info: info_mod.InfoState = field(default_factory=info_mod.InfoState)
+    acted: set = field(default_factory=set)  # (person, claim_key) that already fired E5
+    avoid: dict = field(default_factory=dict)  # person -> {place: (claim_key, action_seq)}
+    morning_acts: dict = field(default_factory=dict)  # person -> [(activity, claim_key, seq)], one-shot
+    pressures: dict = field(default_factory=dict)  # person -> {p_health, p_financial}
+    fired: dict = field(default_factory=dict)  # (person, pressure) -> day (hysteresis)
+    gate_marks: dict = field(default_factory=dict)  # household -> reason for tomorrow's scene
+
+
+def _apply_beliefs(
+    timed: list[_Timed], people: dict[str, Person], state: SimState, day: int, skip: set[str]
+) -> list[_Timed]:
+    """Mechanical E5 behavior for un-spotlit people: a believer whose routine
+    touches an avoided place stays home instead (V1 ruling: the whole clockwork
+    day drops — errand days ARE the visit, and a feared workplace keeps you
+    home), plus one-shot morning acts (store_water). Scene-revised plans win —
+    persons in `skip` are untouched."""
+    base = day * SECONDS_PER_DAY
+    dropped: dict[str, tuple[str, str, int, int]] = {}  # pid -> (place, claim_key, seq, t_dep)
+    for pid in sorted(state.avoid):
+        if pid in skip or pid not in people:
+            continue
+        places = state.avoid[pid]
+        for t, epid, _ty, te, prov in timed:
+            if epid != pid or prov != "clockwork":
+                continue
+            hit = next((te.payload[k] for k in ("to", "at") if te.payload.get(k) in places), None)
+            if hit is not None:
+                claim_key, seq = places[hit]
+                dropped[pid] = (hit, claim_key, seq, t)
+                break
+    if dropped:
+        timed = [x for x in timed if not (x[1] in dropped and x[4] == "clockwork")]
+        for pid in sorted(dropped):
+            place, claim_key, seq, t_dep = dropped[pid]
+            for te in (
+                TimedEvent(t_dep, "plan.avoided",
+                           {"person": pid, "place": place, "claim_key": claim_key,
+                            "activity": "stays_home"}, seq),
+                TimedEvent(t_dep, "activity.start",
+                           {"person": pid, "at": people[pid].home_id, "activity": "stays_home"}, seq),
+            ):
+                timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    for pid in sorted(state.morning_acts):
+        if pid in skip or pid not in people:
+            continue
+        for activity, _claim_key, seq in state.morning_acts[pid]:
+            te = TimedEvent(base + int(6.75 * 3600), "activity.start",
+                            {"person": pid, "at": people[pid].home_id, "activity": activity}, seq)
+            timed.append((te.sim_time, pid, te.type, te, "clockwork"))
+    state.morning_acts.clear()
+    return timed
+
+
+def _pressure_tick(
+    state: SimState,
+    people: dict[str, Person],
+    hh_of_person: dict[str, str],
+    hh_members: dict[str, tuple[str, ...]],
+    day: int,
+    today: list,
+) -> tuple[list[EventIn], dict[str, str]]:
+    """E2 lane: two integrators, vectorless V1 arithmetic. Injury raises
+    p_health; a missed work day (or a household admission's bills) raises
+    p_financial — daily-wage occupations feel it hardest. Upward crossings of
+    the hysteresis threshold emit pressure.crossed and gate tomorrow's scene."""
+    worked, admitted, injured = set(), set(), {}
+    for e in today:
+        pl = e.payload
+        if e.type == "activity.start" and pl.get("activity") in ("work", "driving_rounds", "school", "errand"):
+            worked.add(pl.get("person"))
+        elif e.type == "hospital.admitted":
+            admitted.add(pl.get("person"))
+        elif e.type == "condition.set" and pl.get("kind") == "injury":
+            injured[pl.get("entity_id")] = float(pl.get("intensity") or 0.5)
+    events: list[EventIn] = []
+    marks: dict[str, str] = {}
+    t_tick = (day + 1) * SECONDS_PER_DAY - 300
+    for pid in sorted(people):
+        p = people[pid]
+        pr = state.pressures.setdefault(pid, {"p_health": 0.1, "p_financial": 0.2})
+        before = dict(pr)
+        if pid in injured:
+            pr["p_health"] = min(1.0, max(pr["p_health"], 0.3 + 0.6 * injured[pid]))
+        else:
+            pr["p_health"] = 0.1 + (pr["p_health"] - 0.1) * 0.96
+        if p.occupation not in NO_WORK and p.occupation != "student" and p.age >= 18:
+            hh_admitted = any(
+                q in admitted for q in hh_members.get(hh_of_person.get(pid, ""), ())
+            )
+            bump = 0.0
+            if pid not in worked:
+                bump += 0.09 if p.occupation in DAILY_WAGE else 0.04
+            if hh_admitted:
+                bump += 0.05  # hospital bills land on the household
+            pr["p_financial"] = min(1.0, 0.2 + (pr["p_financial"] - 0.2) * 0.985 + bump)
+        for dim in ("p_health", "p_financial"):
+            fired_day = state.fired.get((pid, dim))
+            th = P_THRESHOLD + (
+                HYSTERESIS if fired_day is not None and day - fired_day < HYSTERESIS_DAYS else 0.0
+            )
+            if before[dim] < th <= pr[dim]:
+                state.fired[(pid, dim)] = day
+                events.append(
+                    EventIn(type="pressure.crossed", sim_time=t_tick,
+                            payload={"person": pid, "pressure": dim, "value": round(pr[dim], 3)},
+                            provenance="clockwork")
+                )
+                hid = hh_of_person.get(pid)
+                if hid:
+                    marks[hid] = "pressure"
+    return events, marks
+
+
+def _info_pass(
+    log: EventLog,
+    state: SimState,
+    run_seed: int,
+    block: Block,
+    people: dict[str, Person],
+    hh_members: dict[str, tuple[str, ...]],
+    hh_of_person: dict[str, str],
+    day: int,
+) -> tuple[dict[str, str], int]:
+    """Post-commit INFO lane (E5 + E7 percepts): witnesses of today's hazards
+    receive tiered percepts, the day's co-presence propagates every held claim
+    mechanically, and credence crossings become belief.action events that
+    change tomorrow's plans. Runs on COMMITTED movements, so reaction-scene
+    rewrites are already reflected. Returns (gate marks, heard count)."""
+    day0, day1 = day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY
+    today = [e for e in log.events() if day0 <= e.sim_time < day1]
+    routine = [
+        (e.sim_time, e.payload.get("person"), e.type, e.payload)
+        for e in today
+        if e.type in _ROUTINE_TYPES
+    ]
+    intervals = info_mod.presence_intervals(routine, people, day)
+
+    def commit_heard(h: info_mod.Heard) -> int:
+        return log.commit(
+            [
+                EventIn(
+                    type="info.heard", sim_time=h.sim_time,
+                    payload={
+                        "person": h.person, "claim_key": h.claim.key,
+                        "claim": h.claim.to_payload(), "source": h.source,
+                        "channel": h.channel, "credence": h.credence,
+                    },
+                    caused_by=h.caused_by, provenance="clockwork",
+                )
+            ]
+        )[0]
+
+    by_type = {c[0]: c for c in hazards_mod.CLASSES}
+    for e in today:
+        if not e.type.startswith("hazard.") or not e.payload.get("place"):
+            continue
+        cls = by_type.get(e.type)
+        shape = cls[3] if cls else "point"
+        predicate = cls[4] if cls else e.type.rsplit(".", 1)[-1]
+        topics = cls[5] if cls else ("safety",)
+        charge = cls[6] if cls else 0.7
+        participants = tuple(e.payload.get("participants") or [])
+        qty = float(len(participants)) if participants else None
+        claim = hazards_mod.hazard_claim(
+            e.type, e.payload["place"], day, predicate, topics, charge, block, qty
+        )
+        holders = [(pid, 0.9) for pid in participants if pid in people]
+        holders += hazards_mod.witness_tiers(
+            e.payload["place"], e.sim_time, shape, block, people, intervals, exclude=participants
+        )
+        for pid, spec in sorted(holders):
+            if claim.key in state.info.holdings.get(pid, {}):
+                continue
+            variant = replace(claim, specificity=spec)
+            variant = replace(variant, text=info_mod.render_text(variant, block))
+            credence = hazards_mod.witness_credence(spec)
+            heard = info_mod.Heard(e.sim_time + 300, pid, variant, "witness", "witness", credence, e.seq)
+            seq = commit_heard(heard)
+            state.info.hear(pid, variant, credence, day, seq, source="witness", t_abs=heard.sim_time)
+
+    heard = info_mod.propagate_day(
+        state.info, run_seed, day, block, people, intervals, hh_members, commit_heard
+    )
+
+    marks: dict[str, str] = {}
+    for act in info_mod.crossed_actions(state.info, state.acted):
+        state.acted.add((act.person, act.claim_key))
+        holding = state.info.holdings[act.person][act.claim_key]
+        seq = log.commit(
+            [
+                EventIn(
+                    type="belief.action", sim_time=day1 - 7200,
+                    payload={
+                        "person": act.person, "claim_key": act.claim_key,
+                        "action": act.action, "place": act.place,
+                        "credence": round(holding.credence, 3),
+                    },
+                    caused_by=act.caused_by, provenance="clockwork",
+                )
+            ]
+        )[0]
+        state.avoid.setdefault(act.person, {})[act.place] = (act.claim_key, seq)
+        if act.action == "store_water":
+            state.morning_acts.setdefault(act.person, []).append(("store_water", act.claim_key, seq))
+        hid = hh_of_person.get(act.person)
+        if hid:
+            marks[hid] = "info"
+    return marks, len(heard)
 
 
 def run_simulation(
@@ -231,35 +450,50 @@ def run_simulation(
     scenes_k: int = 5,
     scene_gate_mode: str = "spotlight",
     injections: list[Injection] | None = None,
+    hazards: bool = False,
 ) -> tuple[int, SimState]:
-    """The V0 day pipeline. Returns (total events, final state)."""
+    """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
+    + sampled hazards -> split-commit with reaction scenes -> INFO propagation
+    -> pressure tick. Returns (total events, final state)."""
     from .minds.scene import compile_plan_overrides, run_morning_scenes, run_reaction_scene
 
     state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
     total = 0
     hh_of_person = {p.id: p.household_id for p in people.values()}
     hh_by_id = {h.id: h for h in households}
+    hh_members = {h.id: h.member_ids for h in households}
 
     for day in range(start_day, start_day + days):
-        # 1. T1 morning scenes
+        # 1. T1 morning scenes — routine-bypass gate: households marked by
+        #    yesterday's E2/E5/E7 lanes always render; attention fills to k
         overrides: dict[str, list[PlanStep]] = {}
         if gateway is not None and scenes_k > 0:
             all_ids = [h.id for h in households]
-            chosen = (
-                all_ids
-                if scene_gate_mode == "all"
-                else state.attention.top_k(all_ids, scenes_k, tick=day * 288)
-            )
+            if scene_gate_mode == "all":
+                chosen = all_ids
+            else:
+                gated = [h for h in sorted(state.gate_marks) if h in hh_by_id]
+                fill = [
+                    h for h in state.attention.top_k(all_ids, scenes_k, tick=day * 288)
+                    if h not in gated
+                ]
+                chosen = (gated + fill)[: max(scenes_k, len(gated))]
             results = run_morning_scenes(
                 log, gateway, state.canon, state.registry, block, households, people, day,
                 chosen_ids=chosen,
             )
             overrides = compile_plan_overrides(results, people, day)
             total += len(results)
+        state.gate_marks.clear()
 
-        # 2. injections (committed now, AFTER morning scenes — a 06:30 scene
+        # 2. compile the day (scene plans win; beliefs bend the rest)
+        timed = _compile_day(run_seed, block, people, day, overrides)
+        timed = _apply_beliefs(timed, people, state, day, skip=set(overrides))
+
+        # 3. injections (committed now, AFTER morning scenes — a 06:30 scene
         #    must not see a 07:20 event) + stub reactions + reaction triggers
-        extra: list[TimedEvent] = []
+        extra: list[TimedEvent] = []  # user-injection consequences
+        extra_cw: list[TimedEvent] = []  # clockwork-hazard consequences
         reactions: dict[str, int] = {}  # household -> t_react (abs)
         for inj in injections or []:
             if inj.day != day:
@@ -281,6 +515,9 @@ def run_simulation(
                 ]
             )[0]
             total += 1
+            if inj.type.startswith("info."):
+                total += _seed_rumor(log, state, run_seed, block, inj, day, t_abs, inj_seq)
+                continue  # a rumor propagates through the INFO lane, not sirens
             extra.extend(stub_institution_reactions(inj, t_abs, block, people, caused_by=inj_seq))
             for pid in inj.participants:
                 hid = hh_of_person.get(pid)
@@ -290,11 +527,50 @@ def run_simulation(
                 if gateway is not None:
                     reactions[hid] = max(reactions.get(hid, 0), t_abs + REACTION_DELAY_S)
 
-        # 3. compile + invalidate + commit (split when a family reacts mid-day)
-        timed = _compile_day(run_seed, block, people, day, overrides)
-        timed = _apply_admissions(timed, extra)
+        # 4. un-injected trouble: sampled hazards ride the same machinery (E7)
+        if hazards:
+            pre_routine = [
+                (t, pid, ty, te.payload)
+                for (t, pid, ty, te, prov) in timed
+                if prov == "clockwork" and ty in _ROUTINE_TYPES
+            ]
+            pre_intervals = info_mod.presence_intervals(pre_routine, people, day)
+            for hz in hazards_mod.sample_day(run_seed, day, block, people, pre_intervals):
+                hz_seq = log.commit(
+                    [
+                        EventIn(
+                            type=hz.type, sim_time=hz.t_abs,
+                            payload={
+                                "place": hz.place,
+                                "participants": list(hz.participants),
+                                "severity": hz.severity,
+                            },
+                            provenance="clockwork",
+                        )
+                    ]
+                )[0]
+                total += 1
+                hz_inj = Injection(
+                    day=day, time_s=hz.t_abs - day * SECONDS_PER_DAY, type=hz.type,
+                    place=hz.place, participants=hz.participants, severity=hz.severity,
+                )
+                extra_cw.extend(
+                    stub_institution_reactions(hz_inj, hz.t_abs, block, people, caused_by=hz_seq)
+                )
+                for pid in hz.participants:
+                    hid = hh_of_person.get(pid)
+                    if hid is None:
+                        continue
+                    state.attention.bump(hid, 3.0, tick=day * 288)
+                    if gateway is not None:
+                        reactions[hid] = max(reactions.get(hid, 0), hz.t_abs + REACTION_DELAY_S)
+
+        # 5. invalidate + commit (split when a family reacts mid-day)
+        timed = _apply_admissions(timed, extra + extra_cw)
         for te in extra:
             timed.append((te.sim_time, "~injected", te.type, te, "user"))
+        for te in extra_cw:
+            timed.append((te.sim_time, "~hazard", te.type, te, "clockwork"))
         timed = _sorted(timed)
 
         if reactions:
@@ -325,7 +601,73 @@ def run_simulation(
             total += _commit(log, _sorted(rest))
         else:
             total += _commit(log, timed)
+
+        # 6. INFO lane (E5/E7): witness percepts, mechanical propagation over
+        #    the day's COMMITTED movements, belief-action crossings
+        info_marks, n_heard = _info_pass(
+            log, state, run_seed, block, people, hh_members, hh_of_person, day
+        )
+        total += n_heard
+        state.gate_marks.update(info_marks)
+
+        # 7. E2: nightly pressure tick with hysteresis
+        day0, day1 = day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY
+        today = [e for e in log.events() if day0 <= e.sim_time < day1]
+        p_events, p_marks = _pressure_tick(state, people, hh_of_person, hh_members, day, today)
+        if p_events:
+            total += len(log.commit(p_events))
+        state.gate_marks.update(p_marks)
+        for hid in {**info_marks, **p_marks}:
+            state.attention.bump(hid, 1.5, tick=day * 288 + 287)
     return total, state
+
+
+def _seed_rumor(
+    log: EventLog,
+    state: SimState,
+    run_seed: int,
+    block: Block,
+    inj: Injection,
+    day: int,
+    t_abs: int,
+    inj_seq: int,
+) -> int:
+    """An injected rumor (type info.*): participants are the first hearers;
+    everything after that is the mechanical INFO lane. The claim is pure data —
+    a novel rumor needs zero new engine code (novelty ladder, §9.4)."""
+    p = dict(inj.payload.get("claim") or {})
+    p.setdefault("key", f"cl:injected:d{day}")
+    p.setdefault("subject", inj.place or "")
+    p.setdefault("predicate", "dangerous")
+    p.setdefault("text", "")
+    claim = info_mod.Claim.from_payload(p)
+    if not claim.text:
+        claim = replace(claim, text=info_mod.render_text(claim, block))
+    n = 0
+    for pid in inj.participants:
+        credence = float(
+            inj.payload.get("credence")
+            or info_mod.update_credence(
+                info_mod.PRIOR_CREDENCE, "f2f", 0,
+                info_mod.traits(run_seed, pid).credulity, claim.charge,
+            )
+        )
+        seq = log.commit(
+            [
+                EventIn(
+                    type="info.heard", sim_time=t_abs,
+                    payload={
+                        "person": pid, "claim_key": claim.key,
+                        "claim": claim.to_payload(), "source": "origin",
+                        "channel": "f2f", "credence": round(credence, 3),
+                    },
+                    caused_by=inj_seq, provenance="clockwork",
+                )
+            ]
+        )[0]
+        state.info.hear(pid, claim, credence, day, seq, source="origin", t_abs=t_abs)
+        n += 1
+    return n
 
 
 def run_days(

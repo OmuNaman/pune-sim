@@ -70,6 +70,32 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
         return f"{nm(p.get('person'))} spoke with a journalist"
     if t == "plan.revised":
         return f"{p.get('household')} changes today's plans"
+    if t == "info.heard":
+        claim = p.get("claim", {})
+        how = {"witness": "saw it", "household": "heard at home", "f2f": "heard"}.get(p.get("channel"), "heard")
+        src = "" if p.get("source") in ("witness", "origin") else f" from {nm(p.get('source'))}"
+        return f"{nm(p.get('person'))} {how}{src}: “{claim.get('text', '')}”"
+    if t == "belief.action":
+        verb = {"avoid_place": "will avoid", "store_water": "is storing water because of",
+                "stop_patronage": "is done with"}.get(p.get("action"), p.get("action"))
+        return f"{nm(p.get('person'))} believes the rumor and {verb} {nm(p.get('place'))}"
+    if t == "plan.avoided":
+        return f"{nm(p.get('person'))} stays home today, avoiding {nm(p.get('place'))}"
+    if t == "pressure.crossed":
+        dim = {"p_health": "health", "p_financial": "money"}.get(p.get("pressure"), p.get("pressure"))
+        return f"{nm(p.get('person'))}'s {dim} worries are mounting"
+    if t == "hazard.water.supply_cut":
+        return f"Water supply cut around {nm(p.get('place'))}"
+    if t == "hazard.power.outage":
+        return f"Power outage around {nm(p.get('place'))}"
+    if t == "hazard.fire.small":
+        return f"Small fire at {nm(p.get('place'))}"
+    if t.startswith("hazard."):
+        who = ", ".join(nm(x) for x in p.get("participants", []))
+        return f"{t.split('.', 1)[1].replace('.', ' ')} at {nm(p.get('place'))}{' — ' + who if who else ''}"
+    if t == "info.rumor":
+        claim = p.get("claim", {})
+        return f"A rumor starts: “{claim.get('text', '')}”"
     return f"{t}: {orjson.dumps(p).decode()[:120]}"
 
 
@@ -174,9 +200,18 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
         p = people.get(pid)
         if p is None:
             return {"error": "unknown person"}
-        memories, moods, lines, interviews = [], [], [], []
+        memories, moods, lines, interviews, heard = [], [], [], [], []
         for e in events_cache:
             pl = e.payload
+            if e.type == "info.heard" and pl.get("person") == pid:
+                c = pl.get("claim", {})
+                heard.append({
+                    "t": e.sim_time, "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                    "text": c.get("text", ""), "key": pl.get("claim_key"),
+                    "credence": pl.get("credence"), "channel": pl.get("channel"),
+                    "source": person_names.get(pl.get("source"), pl.get("source")),
+                    "hop": c.get("hop", 0), "ops": c.get("ops", []),
+                })
             if e.type == "memory.formed" and pl.get("person") == pid:
                 memories.append({"t": e.sim_time, "summary": pl.get("summary"), "salience": pl.get("salience")})
             elif e.type == "mood.delta" and pl.get("person") == pid:
@@ -208,7 +243,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
             "home": p.home_id, "home_name": place_names.get(p.home_id, "home"),
             "work": p.work_id, "work_name": place_names.get(p.work_id, ""),
             "memories": memories, "moods": moods, "timeline": lines,
-            "interviews": interviews,
+            "interviews": interviews, "heard": heard,
         }
 
     @app.get("/api/scenes")
@@ -231,7 +266,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
     def ticker():
         out = []
         for e in events_cache:
-            if e.type in _ROUTINE or e.type in ("llm.response", "fact.established", "fact.superseded"):
+            # info.heard is high-volume gossip — it lives in the Rumors tab
+            if e.type in _ROUTINE or e.type in (
+                "llm.response", "fact.established", "fact.superseded", "info.heard",
+            ):
                 continue
             out.append({
                 "seq": e.seq, "t": e.sim_time,
@@ -242,6 +280,71 @@ def create_app(db_path: str, seed: int, n_households: int = 80) -> FastAPI:
                 "place": e.payload.get("place"),
             })
         out.sort(key=lambda x: (x["t"], x["seq"]))
+        return out
+
+    @app.get("/api/rumors")
+    def rumors():
+        """Claim families: origin, hop-by-hop drift, reach, believers, actions.
+        The auditable telephone game — every number here folds from the log."""
+        by_seq = {e.seq: e for e in events_cache}
+        fams: dict[str, dict] = {}
+        for e in events_cache:
+            if e.type == "info.heard":
+                pl = e.payload
+                c = pl.get("claim", {})
+                key = pl.get("claim_key") or c.get("key", "?")
+                f = fams.setdefault(key, {
+                    "key": key, "first_t": e.sim_time, "origin_type": None,
+                    "veracity": c.get("veracity", "unknown"),
+                    "subject": place_names.get(c.get("subject"), c.get("subject")),
+                    "hearers": {}, "variants": [], "_vseen": {}, "by_day": {},
+                    "actions": [], "spread": [],
+                })
+                f["hearers"][pl.get("person")] = pl.get("credence", 0)
+                day = e.sim_time // SECONDS_PER_DAY
+                f["by_day"][day] = f["by_day"].get(day, 0) + 1
+                text = c.get("text", "")
+                if text not in f["_vseen"]:
+                    f["_vseen"][text] = True
+                    f["variants"].append({
+                        "text": text, "hop": c.get("hop", 0), "ops": c.get("ops", []),
+                        "first_hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                    })
+                if len(f["spread"]) < 400:
+                    f["spread"].append({
+                        "t": e.sim_time, "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                        "person": person_names.get(pl.get("person"), pl.get("person")),
+                        "person_id": pl.get("person"),
+                        "source": person_names.get(pl.get("source"), pl.get("source")),
+                        "channel": pl.get("channel"), "credence": pl.get("credence"),
+                        "hop": c.get("hop", 0),
+                    })
+                if f["origin_type"] is None:
+                    root, hops = e, 0
+                    while root.caused_by is not None and root.caused_by in by_seq and hops < 20:
+                        root, hops = by_seq[root.caused_by], hops + 1
+                    f["origin_type"] = root.type
+                    f["origin_prov"] = root.provenance
+            elif e.type == "belief.action":
+                pl = e.payload
+                key = pl.get("claim_key")
+                if key in fams:
+                    fams[key]["actions"].append({
+                        "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                        "person": person_names.get(pl.get("person"), pl.get("person")),
+                        "person_id": pl.get("person"),
+                        "action": pl.get("action"),
+                        "place": place_names.get(pl.get("place"), pl.get("place")),
+                    })
+        out = []
+        for f in sorted(fams.values(), key=lambda x: x["first_t"]):
+            hearers = f.pop("hearers")
+            f.pop("_vseen")
+            f["reach"] = len(hearers)
+            f["believers"] = sum(1 for c in hearers.values() if (c or 0) >= 0.55)
+            f["first_hm"] = to_datetime(f.pop("first_t")).strftime("%a %H:%M")
+            f["by_day"] = [{"day": d, "n": n} for d, n in sorted(f["by_day"].items())]
+            out.append(f)
         return out
 
     @app.get("/api/positions")
