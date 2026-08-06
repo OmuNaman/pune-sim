@@ -76,7 +76,10 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
     if t == "scene.reaction":
         return f"The {p.get('household')} household reacts"
     if t == "conversation.held":
-        return f"{nm(p.get('person'))} spoke with a journalist"
+        if p.get("with") == "journalist":
+            return f"{nm(p.get('person'))} spoke with a journalist"
+        who = " and ".join(nm(x) for x in p.get("participants", []))
+        return f"{who} stop to talk at {nm(p.get('place'))} — the news changes hands"
     if t == "plan.revised":
         return f"{p.get('household')} changes today's plans"
     if t == "info.heard":

@@ -24,6 +24,7 @@ from .kernel.timebase import SECONDS_PER_DAY
 from .kernel.worlddelta import PlanStep
 from .llm.gateway import CassetteMiss, Gateway
 from .minds import info as info_mod
+from .minds import talk as talk_mod
 from .population.synth import Household, Person
 from .world import hazards as hazards_mod
 from .world import unrest as unrest_mod
@@ -504,6 +505,7 @@ def _info_pass(
     hh_members: dict[str, tuple[str, ...]],
     hh_of_person: dict[str, str],
     day: int,
+    gateway: Gateway | None = None,
 ) -> tuple[dict[str, str], int]:
     """Post-commit INFO lane (E5 + E7 percepts): witnesses of today's hazards
     receive tiered percepts, the day's co-presence propagates every held claim
@@ -605,6 +607,19 @@ def _info_pass(
         hid = hh_of_person.get(act.person)
         if hid:
             marks[hid] = "info"
+
+    # T2 street talk: the day's one exchange that carried news across a
+    # household line. The transmission already happened and is committed —
+    # this is only the camera turning to look at it.
+    if gateway is not None and heard:
+        ex = talk_mod.pick_exchange(heard, people, hh_of_person, intervals)
+        if ex is not None:
+            seq = talk_mod.render_exchange(log, gateway, block, people, ex)
+            if seq is not None:
+                for pid in (ex.speaker, ex.listener):
+                    hid = hh_of_person.get(pid)
+                    if hid:
+                        state.attention.bump(hid, 0.8, tick=day * 288 + 200)
     return marks, len(heard)
 
 
@@ -623,6 +638,7 @@ def run_simulation(
     injections: list[Injection] | None = None,
     hazards: bool = False,
     follow: tuple[str, ...] = (),
+    talk: bool = True,
 ) -> tuple[int, SimState]:
     """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
     + sampled hazards -> split-commit with reaction scenes -> INFO propagation
@@ -824,7 +840,8 @@ def run_simulation(
         # 6. INFO lane (E5/E7): witness percepts, mechanical propagation over
         #    the day's COMMITTED movements, belief-action crossings
         info_marks, n_heard = _info_pass(
-            log, state, run_seed, block, people, hh_members, hh_of_person, day
+            log, state, run_seed, block, people, hh_members, hh_of_person, day,
+            gateway=gateway if talk else None,
         )
         total += n_heard
         state.gate_marks.update(info_marks)

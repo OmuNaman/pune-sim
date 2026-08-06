@@ -29,6 +29,7 @@ def run(
     inject: str = typer.Option(None, help="JSON file of injections [{day,time,type,place,participants,severity}]"),
     hazards: bool = typer.Option(True, "--hazards/--no-hazards", help="Sample random hazards (V1 un-injected ripples)"),
     follow: list[str] = typer.Option(None, "--follow", help="Household or person id rendered every day, ADDITIVE to k (repeatable; raises cost and narrows coverage of everyone else)"),
+    talk: bool = typer.Option(True, "--talk/--no-talk", help="Render the day's one cross-household exchange (needs --scenes; one extra call/day)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
@@ -63,7 +64,7 @@ def run(
         log, run_seed, block, hhs, people,
         days=days, gateway=gateway, scenes_k=k,
         scene_gate_mode=cfg.scene_gate_mode, injections=injections,
-        hazards=hazards, follow=tuple(follow or ()),
+        hazards=hazards, follow=tuple(follow or ()), talk=talk,
     )
     typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}")
     typer.echo(f"events committed : {n} over {days} day(s)"

@@ -73,6 +73,11 @@ _ROUTINE_TYPES = {"trip.start", "trip.end", "activity.start"}
 _SELF_OUTPUT_TYPES = frozenset({
     "scene.morning", "scene.reaction", "scene.skipped", "scene.invalid_ref",
     "memory.formed", "mood.delta", "plan.revised",
+    # A street exchange is the camera rendering a transmission that already
+    # happened. The information itself reaches the household through the
+    # info.heard event; showing the rendered dialogue too would put the model's
+    # own words back in front of it, which is the failure this set exists for.
+    "conversation.held",
 })
 
 
