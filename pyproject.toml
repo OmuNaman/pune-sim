@@ -36,5 +36,11 @@ packages = ["src/punesim"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+ignore = ["B008"]  # typer.Option in defaults is the typer idiom
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/refusal_probe.py" = ["ISC004"]  # the prompt battery reads better unwrapped
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
