@@ -241,10 +241,28 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
     rare, observable thing (in hospital, convalescing, sheltering) and treat
     everything else as an ordinary day.
   The standing consequence is a two-part gate, both scripted: `audit_run.py`
-  (27 mechanical probes, exits nonzero) and `continuity_read.py` (a judge model
+  (28 mechanical probes, exits nonzero) and `continuity_read.py` (a judge model
   reading a followed family against canon, citations required). Eyeball audits
   under-count — the mechanical sweep found 11 verbatim duplications where the
   hand-read found 1, and a defect class nobody had looked for.
+
+  **Known and deliberately left open**, so they are followed up rather than
+  rediscovered:
+  - *Absence detection still reads strings.* A scene that narrates someone
+    staying home writes free text ("stays home, calls the school"), which is not
+    in ABSENT_ACTIVITIES, so the ledger pays them for the day. The robust rule
+    is presence-based — a person with a workplace who never emitted a trip is
+    not at work — and it needs the committed day, not the planned one.
+  - *The memory digest has no forgetting.* Salience decays with age so nothing
+    pins the digest, but nothing is ever dropped either; a year-long run needs
+    consolidation, not just re-ranking.
+  - *Street talk renders one exchange a day.* That is a deliberate floor, not a
+    model of a block's social life — it exists so the information graph is
+    visible at all. Scaling it means sampling by attention, not by rank.
+  - *`--follow` is additive to the scene budget*, so following a family raises
+    per-day cost above k and narrows coverage of everyone else (measured: 78 of
+    80 households reached in 30 days instead of 80). Intentional, but it should
+    become a budget the user sets rather than a side effect.
 - **V3 — Real Pune data, at scale (8–12 wks).** The original M1–M6 machinery,
   built against known requirements with V0's cassette suite as the regression
   harness for *feel*: full ingest (OSM Western-Zone clip, GTFS, jurisdictions,
