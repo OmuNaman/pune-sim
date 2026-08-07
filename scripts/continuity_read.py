@@ -195,6 +195,9 @@ def build_scenes(log: EventLog, hh, people) -> list[tuple[int, str]]:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):  # findings quote Marathi scene text
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", required=True, type=Path)
     ap.add_argument("--household", default="hh:000")

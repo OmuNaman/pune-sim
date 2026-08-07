@@ -342,3 +342,29 @@ def test_a_scene_cannot_invent_a_person(tmp_path, world):
     rejected = list(log.events(type="scene.invalid_ref"))
     assert rejected, "invented ids were dropped silently"
     assert set(rejected[0].payload["ids"]) == {"person:ghost_auntie", "person:neighbor"}
+
+
+def test_a_memory_pins_the_day_it_means(tmp_path, world):
+    """Relative time is true for one day and wrong forever after. The 30-day
+    re-soak caught a Thursday-night power cut still being "kal raatri" in
+    scenes on Friday, Saturday, Sunday and Monday, because each morning
+    re-read a memory that said so."""
+    from punesim.minds.scene import absolutize
+
+    t = 15 * 86400 + 6 * 3600  # Fri 16 Jan 2026, 06:00
+    out = absolutize("Lost his eraser doing homework by candlelight last night.", t)
+    assert "last night" not in out.lower() and "Thu 15 Jan" in out
+    assert "kal raatri" not in absolutize("Kal raatri light gela hota.", t).lower()
+    assert absolutize("", t) == ""
+
+    block, hhs, people = world
+    hh = hhs[0]
+    tr = ScriptedTransport([_delta(memory_writes=[
+        {"person_id": hh.member_ids[0], "salience": 0.8,
+         "summary": "The power went out last night and stayed out."},
+    ])])
+    log = EventLog(tmp_path / "abs.db")
+    gw = Gateway(_cfg(tmp_path), Cassette(tmp_path / "c.db"), transport=tr, log=log)
+    engine.run_simulation(log, SEED, block, hhs, people, days=1, gateway=gw, scenes_k=1)
+    summaries = [e.payload["summary"] for e in log.events(type="memory.formed")]
+    assert summaries and all("last night" not in s.lower() for s in summaries)

@@ -695,6 +695,12 @@ def load(db: Path, branch: int) -> list[Event]:
 
 
 def main() -> int:
+    # Detail lines quote Marathi and Hindi scene text. On a Windows console
+    # redirected to a file that is cp1252, which raises mid-print and turns a
+    # clean audit into exit 1 — the one thing the exit code must never lie about.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", required=True, type=Path)
     ap.add_argument("--seed", type=int, default=108)

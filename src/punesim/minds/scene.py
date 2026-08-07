@@ -7,6 +7,7 @@ assert_facts(). A scene can revise members' day plans; the plan compiler turns
 those into ordinary clockwork trips.
 """
 
+import re
 from dataclasses import dataclass
 
 from ..kernel.facts import Canon, PredicateRegistry, assert_facts
@@ -106,6 +107,36 @@ def _who(pid: str, people: dict[str, Person] | None, block: Block) -> str:
 
 def _flatten(s: str) -> str:
     return " ".join((s or "").lower().split())
+
+
+# A memory is read for weeks. "Last night" is true for one day and wrong
+# forever after, and the 30-day re-soak caught exactly that: a power cut on
+# Thursday night was still "kal raatri" in scenes on Friday, Saturday, Sunday
+# and Monday, because each morning re-read a memory that said so. Relative time
+# is rewritten to the day it actually means, at the moment the memory is
+# written, in the languages the scenes are written in.
+_RELATIVE_TIME = (
+    (re.compile(r"\blast night\b", re.IGNORECASE), "on {prev} night"),
+    (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
+    (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
+    (re.compile(r"\btonight\b", re.IGNORECASE), "on {today} night"),
+    (re.compile(r"\bthis morning\b", re.IGNORECASE), "on {today} morning"),
+    (re.compile(r"\btoday\b", re.IGNORECASE), "on {today}"),
+    (re.compile(r"\baaj\b", re.IGNORECASE), "{today} la"),
+)
+
+
+def absolutize(summary: str, sim_time: int) -> str:
+    """Pin a memory's relative time words to the day they were written."""
+    if not summary:
+        return summary
+    today = to_datetime(sim_time)
+    prev = to_datetime(max(0, sim_time - SECONDS_PER_DAY))
+    for rx, tmpl in _RELATIVE_TIME:
+        summary = rx.sub(
+            tmpl.format(prev=f"{prev:%a %d %b}", today=f"{today:%a %d %b}"), summary
+        )
+    return summary
 
 
 def held_memories(log: EventLog, member_ids: set[str], until: int | None = None) -> set[tuple[str, str]]:
@@ -357,13 +388,23 @@ def memory_digest(
         weight = float(e.payload.get("salience") or 0) * (0.93**age)
         per.setdefault(pid, []).append((weight, e.sim_time, e.payload.get("summary", "")))
     lines: list[str] = []
+    cutoff = (day - 1) * SECONDS_PER_DAY
     for pid in sorted(per):
         seen: set[str] = set()
         keep: list[tuple[float, int, str]] = []
+        fresh = 0
         for w, t, s in sorted(per[pid], key=lambda x: (-x[0], x[1])):
-            if s and s not in seen:
-                seen.add(s)
-                keep.append((w, t, s))
+            if not s or s in seen:
+                continue
+            # At most one memory from the last two days: what just happened is
+            # already in RECENT EVENTS, and stacking it here is what made a
+            # household re-live the same small incident three mornings running.
+            if t >= cutoff:
+                if fresh:
+                    continue
+                fresh += 1
+            seen.add(s)
+            keep.append((w, t, s))
             if len(keep) >= per_person:
                 break
         name = _who(pid, people, block)
@@ -526,7 +567,8 @@ def apply_delta(
             EventIn(
                 type="memory.formed",
                 sim_time=sim_time,
-                payload={"person": m.person_id, "salience": m.salience, "summary": m.summary},
+                payload={"person": m.person_id, "salience": m.salience,
+                         "summary": absolutize(m.summary, sim_time)},
                 caused_by=scene_seq,
                 provenance="llm_scene",
             )
