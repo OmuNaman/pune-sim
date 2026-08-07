@@ -72,13 +72,20 @@ def _apply_beliefs(
     persons in `skip` are untouched."""
     base = day * SECONDS_PER_DAY
     dropped: dict[str, tuple[str, str, int, int]] = {}  # pid -> (place, claim_key, seq, t_dep)
+    # One pass to index the day by person, instead of re-reading the whole day
+    # once per believer. `state.avoid` only ever grows — nobody stops avoiding a
+    # place — so the old nested scan was |avoiders| x |events|, which is zero on
+    # day 0 and about a billion comparisons a day by the end of a 30-day run at
+    # 12k households. Same order preserved, so the first hit is the same hit.
+    by_person: dict[str, list] = {}
+    for row in timed:
+        if row[4] == "clockwork":
+            by_person.setdefault(row[1], []).append(row)
     for pid in sorted(state.avoid):
         if pid in skip or pid not in people:
             continue
         places = state.avoid[pid]
-        for t, epid, _ty, te, prov in timed:
-            if epid != pid or prov != "clockwork":
-                continue
+        for t, _epid, _ty, te, _prov in by_person.get(pid, ()):
             hit = next((te.payload[k] for k in ("to", "at") if te.payload.get(k) in places), None)
             if hit is not None:
                 claim_key, seq = places[hit]

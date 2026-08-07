@@ -39,3 +39,4 @@ class SimState:
     pending: dict = field(default_factory=dict)  # future_day -> [TimedEvent] (procedure futures)
     unrest: unrest_mod.UnrestState = field(default_factory=unrest_mod.UnrestState)
     sheltered: set = field(default_factory=set)  # today's curfew-bound, pre-scene
+    worksites: dict | None = None  # roaming trades' client houses; constant per run

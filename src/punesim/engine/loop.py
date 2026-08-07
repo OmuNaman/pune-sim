@@ -36,18 +36,25 @@ def run_simulation(
     follow: tuple[str, ...] = (),
     talk: bool = True,
     block_name: str = DEFAULT_BLOCK,
+    state: SimState | None = None,
 ) -> tuple[int, SimState]:
     """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
     + sampled hazards -> split-commit with reaction scenes -> INFO propagation
     -> pressure tick. Returns (total events, final state)."""
     from ..minds.scene import compile_plan_overrides, run_morning_scenes, run_reaction_scene
 
-    state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
-    state.proc.finances = proc_mod.init_finances(run_seed, households, people)
-    for p in people.values():  # a poor family STARTS worried — being born poor
-        f = state.proc.finances.get(p.household_id)  # is not an E2 event
-        if f is not None and p.age >= 18:
-            state.pressures[p.id] = {"p_health": 0.1, "p_financial": proc_mod.p_financial(f)}
+    # A caller may pass state in to advance an existing world one day at a time
+    # (scripts/day_cost.py does, to see what grows as a run gets longer). A
+    # fresh SimState per day would reset exactly the accumulation worth
+    # measuring, and would also re-fire everyone's opening pressures.
+    fresh = state is None
+    if fresh:
+        state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
+        state.proc.finances = proc_mod.init_finances(run_seed, households, people)
+        for p in people.values():  # a poor family STARTS worried — being born poor
+            f = state.proc.finances.get(p.household_id)  # is not an E2 event
+            if f is not None and p.age >= 18:
+                state.pressures[p.id] = {"p_health": 0.1, "p_financial": proc_mod.p_financial(f)}
     total = 0
     if start_day == 0:  # self-describing log: a db alone is enough to branch it
         meta = {"seed": run_seed, "households": len(households), "days": days,
@@ -66,8 +73,10 @@ def run_simulation(
     hh_of_person = {p.id: p.household_id for p in people.values()}
     hh_by_id = {h.id: h for h in households}
     hh_members = {h.id: h.member_ids for h in households}
-    worksites = roaming_worksites(run_seed, block, people)
-    for ref in follow:  # a followed family renders every day, whatever else happens
+    if state.worksites is None:  # constant per run; 10M distance sums at 12k
+        state.worksites = roaming_worksites(run_seed, block, people)
+    worksites = state.worksites
+    for ref in follow if fresh else ():  # focus is set once, not re-set per day
         hid = ref if ref in hh_by_id else hh_of_person.get(ref)
         if hid is None:
             raise ValueError(f"--follow: no such household or person: {ref}")
