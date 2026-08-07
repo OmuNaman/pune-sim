@@ -326,6 +326,11 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   "police")` are world queries, and a JSON expression language for them would
   be a worse Python.
 
+  **Cost exit met** — 12,000 households with scenes on: **$0.0031/sim-day**
+  against the $2 bar, versus $0.0029 at 80 households in V1. The gate caps
+  scenes, so spend tracks attention rather than population; 14 of 12,000
+  households were on camera, which is the trade it makes.
+
   **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
   distinguishes a childless couple from an empty nest; a fourth (literacy or the
   age bands) would pin it. Hazard rates are absolute rather than per-capita and
