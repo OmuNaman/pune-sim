@@ -129,6 +129,24 @@ Audited in the same four windows: **0 FAIL**, and the same two
 `INFO-WITNESS-HEARSAY` warns, which are opportunities rather than corruption.
 Nothing the routing changed broke anything the earlier soak had settled.
 
+## And once more, on the code that shipped
+
+An optimisation pass followed — a hash-derived uniform for single coin flips, an
+index of which claims a person can still pass on, and inverting the hazard
+audience check. The first changes info-lane draw values (deliberately; the
+clockwork hash cannot see it), the other two are byte-identical on a 16-day
+routed run. So the whole thing was soaked a third time, on exactly what is in
+the repo:
+
+**30 days · 12,000 households · 49,578 people · 6,833,821 events · 31 minutes ·
+0 FAIL across four windows.**
+
+That is 62 s/sim-day. Earlier figures in this document read 76 and 92 because
+those runs shared the machine with probes, audits and test suites; this one had
+it to itself. Treat the higher numbers as the honest pessimistic ones and this
+as the clean-room one — the useful fact is that a month of a 50,000-person city
+takes half an hour with no model in the loop.
+
 ## Standing observations, not defects
 
 - **Four hazards in 30 days** across 49,578 people. `hazards.CLASSES` gives each
