@@ -35,7 +35,12 @@ _RELATIVE_TIME = (
     (re.compile(r"\btoday'?s\b", re.IGNORECASE), "{today}'s"),
     (re.compile(r"\blast night\b", re.IGNORECASE), "on {prev} night"),
     (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
-    (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
+    # Transliterated Marathi has no fixed spelling, so the night-before shows up
+    # as ratri / raatri / raatra / raat. A 12k-household scene run produced
+    # "Kal raatra ... aata sakali", which the table did not know and which then
+    # sat in two memories as a dated falsehood.
+    (re.compile(r"\bkal\s+raa?tr[ia]\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
+    (re.compile(r"\baaj\s+sakali\b|\baata\s+sakali\b", re.IGNORECASE), "{today} sakali"),
     # possessive before bare, or "last week's workbook" reads
     # "in the week before Tue 06 Jan's workbook"
     (re.compile(r"\blast week'?s\b", re.IGNORECASE), "the earlier week's"),

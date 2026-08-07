@@ -65,7 +65,10 @@ ABSENCE_WORDS = re.compile(
 # to be copied - 147 of the 520 memories in the second soak carried one.
 RELATIVE_TIME_WORDS = re.compile(
     r"\b(yesterday|last night|last week|tonight|this morning|tomorrow|"
-    r"kal|kalchi|kalcha|kalche|parva|aaj|raatri|sakali|"
+    # `raatri` and `sakali` are a time of day, not a relative date — "morning"
+    # is not wrong in a memory, "this morning" is. They are only relative in
+    # combination, and `kal`/`aaj` already catch those.
+    r"kal|kalchi|kalcha|kalche|parva|aaj|"
     r"day before|next day|earlier today)\b",
     re.IGNORECASE,
 )
