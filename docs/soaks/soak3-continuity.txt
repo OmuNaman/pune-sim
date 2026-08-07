@@ -1,0 +1,40 @@
+
+=== continuity read: hh:000 (Chavan family), runs\soak3\events.db ===
+21 scenes over days 0-21, judged by deepseek/deepseek-v4-pro in 4 batches
+
+VERDICT: FAIL — 6 contradictions (6 major)
+
+  [major] STATE day 16
+      scene : The Chavan household wakes up to another morning without electricity.
+      canon : day 14 Thu 15 Jan 21:29 — ... 'Power has gone out around Nilkantheshwar'
+      why   : The power outage canonically began on day 14 at 21:29 (Thursday night), but the scene on day 16 (Saturday morning) claims the outage has already laste
+  [major] STATE day 16
+      scene : Suhas: Ho, kal raatri pan nahi hoti. Mhanje don divas zale.
+      canon : day 14 Thu 15 Jan 21:29 — ... 'Power has gone out around Nilkantheshwar'
+      why   : Suhas states the power was also out 'last night' (Friday night) and that it has been two days, but canon records the outage starting only on Thursday 
+  [major] STATE day 18
+      scene : Madhura: Aahe ka? Ata tar panch divas zale.
+      canon : day 14 Thu 15 Jan 21:29 — ... 'Power has gone out around Nilkantheshwar'
+      why   : Madhura claims the power has been out for five days on day 18 (Monday), but canonically the outage started on day 14 (Thursday night), meaning only fo
+  [major] EVENT-TIME day 19
+      scene : Kal raat bijli thi na? Aaj subah bhi hai lagta hai.
+      canon : day 14 Thu 15 Jan 21:29 — Suhas Chavan was present: 'Power has gone out around Nilkantheshwar'
+      why   : Suhas implies power was on last night (day 18), but canon records a power outage on day 14 that triggered avoidance, and there is no record of power r
+  [major] STATE day 20
+      scene : Madhura lights the stove for chai and notices the lights flicker on — power is back after a week.
+      canon : day 14 Thu 15 Jan 21:29 — Power has gone out around Nilkantheshwar
+      why   : The scene states power returns after a week, implying the outage lasted from day 14 to day 20, but there is no canon record of a sustained week-long o
+  [major] REPEAT day 20
+      scene : Suhas confirms he saw the lane lights working when he stepped out.
+      canon : day 14 Thu 15 Jan 21:29 — Suhas Chavan was present: 'Power has gone out around Nilkantheshwar'
+      why   : This repeats the day 19 scene's implication that power was restored, treating the outage as a recurring event rather than a one-time incident on day 1
+
+  note: The Chavan family's morning routines are consistent with the canon roster and contain no contradictions of event timing, identity, state, or repeated incidents. Minor language variation on day 4 is not a canon fact and does not affect continuity.
+
+  note: The family's morning routines are consistent with the canon; accident rumors are external hearsay and do not contradict any recorded facts.
+
+  note: The family's morning routines are coherent, but the duration of the power outage is consistently exaggerated in scenes on days 16 and 18, contradicting the canonical start time on day 14.
+
+  note: The household's coherence around the power outage contradicts the canon: the day 14 incident becomes a recurring topic, and the timeline of restoration lacks canon support, undermining the simulation's continuity promise.
+
+written: docs\soaks\soak3-continuity.json

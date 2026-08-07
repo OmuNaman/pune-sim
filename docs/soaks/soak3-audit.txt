@@ -1,0 +1,147 @@
+
+=== audit runs\soak3\events.db ===
+branch 0 | seed 108 (corroborated by run.meta) | 80 households | 306 people | 30 days | 43,538 events
+
+FAIL  SCENE-SKIP-RATE          45/233 scenes skipped (19.3%; warn >1%, fail >10%)
+WARN  ACTIVITY-VOCAB           625 free-text activities (406 distinct); 37 look like an absence but are counted as worked
+WARN  BELIEF-ACTION-SCALE      308 behaviour changes over 3 claims; 1 claim(s) moved more than a quarter of the block
+WARN  ID-HONORIFIC             7 honorific-addressed names outside the roster (heuristic)
+WARN  ID-REJECTED              7 scenes had an invented id dropped at the gate
+WARN  INFO-WITNESS-HEARSAY     37 hearsay retellings reached a witness of the same event
+WARN  MEMORY-RELATIVE-TIME     9 memories still carry a relative time word
+WARN  PROMPT-COVERAGE          1 event types render as nothing in a scene prompt
+WARN  SCENE-COPY-PASTE         5 scenes gave 3+ members an identical memory
+WARN  SCENE-EVERY-DAY          8 days rendered no morning scene at all
+WARN  TEMPORAL-DRIFT           35 scenes said 'yesterday' about something older (heuristic)
+PASS  COST                     $0.0044/sim-day over 30 days (limit $1.00)
+PASS  DEBT-SPIRAL              0 loans taken, 0 interest accruals; 0 spiralling
+PASS  DUP-MEM                  0 exact consecutive-day duplicates (limit 0)
+PASS  DUP-MSG                  0 exact consecutive-day duplicates (limit 0)
+PASS  HAZARD-AMBULANCE         0 ambulances for non-casualty hazards (limit 0)
+PASS  HAZARD-CONDITION         0 hazards with victims but no condition (limit 0)
+PASS  HAZARD-PERCEPT           0 of 5 hazards perceived by nobody (limit 0)
+PASS  ID-CHILD-CORRESPONDENT   0 messages to an unnamed child outside the household (limit 0)
+PASS  ID-INVENTED-REF          0 references to people who do not exist (limit 0)
+PASS  ID-SPEAKER-ROSTER        0 transcript speakers labelled with an id (limit 0)
+PASS  INFO-ECHO                0 of 1013 hearings came back to their own teller (limit 0)
+PASS  PRESSURE-CLASS           0 occupation classes with >50% financially crossed (limit 0)
+PASS  PRESSURE-REFIRE          0 (person, dimension) pairs crossed 3+ times (limit 0)
+PASS  RUMOR-IMMORTAL           0 claims still alive in the last 3 days (limit 0)
+PASS  RUMOR-SATURATION         0 claims past 90% of the block (limit 0)
+PASS  SELF-ECHO                0 texts a person's later scene reproduced verbatim (limit 0)
+PASS  SPOTLIGHT-COVERAGE       80/80 households on camera at least once (187 slots spent; ceiling 80)
+PASS  SPOTLIGHT-STREAK         longest streak among UNFOLLOWED households 2 (limit 10); 1 pinned by --follow and exempt
+PASS  SPOTLIGHT-VARIETY        80 distinct households in the last 10 days (want >= 8)
+PASS  TALK-COVERAGE            11 cross-household exchanges on 11 of 30 days, 11 distinct pairs
+
+--- detail ---
+
+[FAIL] SCENE-SKIP-RATE
+    seq22538 d15 hh:000: APIConnectionError: Connection error.
+    seq22539 d15 hh:001: APIConnectionError: Connection error.
+    seq22540 d15 hh:002: APIConnectionError: Connection error.
+    seq22541 d15 hh:003: APIConnectionError: Connection error.
+    seq22542 d15 hh:004: APIConnectionError: Connection error.
+    seq32830 d22 hh:000: APIConnectionError: Connection error.
+    seq32831 d22 hh:011: APIConnectionError: Connection error.
+    seq32832 d22 hh:012: APIConnectionError: Connection error.
+    seq32833 d22 hh:013: APIConnectionError: Connection error.
+    seq32834 d22 hh:015: APIConnectionError: Connection error.
+    seq34164 d23 hh:000: APIConnectionError: Connection error.
+    seq34165 d23 hh:016: APIConnectionError: Connection error.
+    ... and 33 more
+
+[WARN] ACTIVITY-VOCAB
+    Go to hospital using alternative route
+    Return home after drop
+    Return home from school
+    Return home with milk
+    Return home, call electrician about inverter
+    afternoon rest
+    function event, stay late
+    get ready for hospital
+    leave for hospital via Tulshibaug
+    leave home
+    leave home for work
+    relax at home
+    ... and 8 more
+
+[WARN] BELIEF-ACTION-SCALE
+    cl:power.outage:place:node/11430153883:d14: 254 of 306 people (83%) {'avoid_place': 254}
+    cl:power.outage:place:node/11430153883:d14            254 people (83%) {'avoid_place': 254}
+    cl:water.supply_cut:place:node/13390674189:d9          50 people (16%) {'store_water': 50}
+    cl:mandal_funds                                         4 people (1%) {'stop_patronage': 4}
+
+[WARN] ID-HONORIFIC
+    seq11668 d8: 'Revati tai' is a minor's name
+    seq11683 d8: 'Shubhangi tai' is a minor's name
+    seq14925 d10: 'Vasudha tai' is a minor's name
+    seq17815 d12: 'Sunita tai' is a minor's name
+    seq19262 d13: 'Chhaya tai' matches nobody
+    seq28725 d19: 'Haan didi' matches nobody
+    seq30088 d20: 'Vasudha tai' is a minor's name
+
+[WARN] ID-REJECTED
+    seq8056 d5 hh:002: ['way/160919295', 'way/281844137']
+    seq22831 d15 hh:030: ['shop_owner_or_security']
+    seq22981 d15 hh:044: ['neighbour (unnamed)']
+    seq23077 d15 hh:053: ['Surya Sahyadri Hospital']
+    seq23099 d15 hh:056: ['daughter-in-law (unlisted)']
+    seq23146 d15 hh:060: ['friend']
+    seq28730 d19 hh:035: ['Sachin More', 'Sunita Kulkarni']
+
+[WARN] INFO-WITNESS-HEARSAY
+    seq2827 d1: person:023.1 told a different story than they saw
+    seq2836 d1: person:023.1 told a different story than they saw
+    seq8600 d5: person:020.0 told a different story than they saw
+    seq8608 d5: person:002.2 told a different story than they saw
+    seq8664 d5: person:015.3 told a different story than they saw
+    seq8686 d5: person:020.0 told a different story than they saw
+    seq8688 d5: person:020.3 told a different story than they saw
+    seq10158 d6: person:013.2 told a different story than they saw
+    seq10194 d6: person:033.0 told a different story than they saw
+    seq10201 d6: person:013.2 told a different story than they saw
+    seq11611 d7: person:048.0 told a different story than they saw
+    seq11614 d7: person:039.0 told a different story than they saw
+    ... and 3 more
+
+[WARN] MEMORY-RELATIVE-TIME
+    seq7088 d5 person:000.1: ['last week'] in "Madhura notes that Vaishali has her workbook and copy ready, a relief "
+    seq14802 d10 person:023.3: ['tomorrow'] in "Stored water and is worried about school water supply tomorrow."
+    seq17821 d12 person:039.0: ['last week'] in "Recalled the road accident near Nilkantheshwar from last week while re"
+    seq23353 d15 person:079.4: ['last week'] in "Got ready for school; remembered the accident she saw near Shaniwar Ma"
+    seq25965 d17 person:029.2: ['tomorrow'] in "Ninad mentioned his clinic has no water issues and his shift is tomorr"
+    seq30089 d20 person:001.0: ['last week'] in "Remembers power outage near Nilkantheshwar from last week; still no of"
+    seq30096 d20 person:002.0: ['last week'] in "Arman remembers the power cut from last week but is relieved everythin"
+    seq31476 d21 person:005.0: ['last week'] in "Power restored after last week's outage; avoiding Nilkantheshwar side "
+    seq31498 d21 person:010.1: ['last week'] in "Remembers last week's power outage but relieved it's over."
+
+[WARN] PROMPT-COVERAGE
+    run.meta
+
+[WARN] SCENE-COPY-PASTE
+    scene 14849: 3 people given "stored water on sat 10 jan night after seeing the water cut "
+    scene 14873: 3 people given "saw water supply cut near ahilyadevi high school on sat 10 j"
+    scene 22801: 5 people given "power went out around nilkantheshwar on thu 15 jan night; we"
+    scene 22814: 4 people given "saw power outage near nilkantheshwar on thu 15 jan night; de"
+    scene 22868: 5 people given "saw power cut around nilkantheshwar at 21:29 on thu 15 jan a"
+
+[WARN] SCENE-EVERY-DAY
+    days: [22, 23, 24, 25, 26, 27, 28, 29]
+
+[WARN] TEMPORAL-DRIFT
+    seq14809 d10: 'yesterday' for a collision last heard d8 (2 days stale)
+    seq20670 d14: 'yesterday' for a collision last heard d6 (8 days stale)
+    seq22551 d15: 'yesterday' for a collision last heard d9 (6 days stale)
+    seq22565 d15: 'yesterday' for a collision last heard d10 (5 days stale)
+    seq22606 d15: says 'yesterday' about a supply_cut nobody heard of
+    seq22618 d15: 'yesterday' for a collision last heard d10 (5 days stale)
+    seq22659 d15: says 'yesterday' about a supply_cut nobody heard of
+    seq22714 d15: 'yesterday' for a collision last heard d9 (6 days stale)
+    seq22714 d15: says 'yesterday' about a supply_cut nobody heard of
+    seq22752 d15: 'yesterday' for a collision last heard d11 (4 days stale)
+    seq22752 d15: says 'yesterday' about a supply_cut nobody heard of
+    seq22784 d15: 'yesterday' for a collision last heard d5 (10 days stale)
+    ... and 8 more
+
+31 probes: 20 pass, 10 warn, 1 fail, 0 skip

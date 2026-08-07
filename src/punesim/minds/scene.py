@@ -120,6 +120,8 @@ _RELATIVE_TIME = (
     (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
     (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
     (re.compile(r"\blast week\b", re.IGNORECASE), "in the week before {today}"),
+    (re.compile(r"\btomorrow'?s\b", re.IGNORECASE), "{next}'s"),
+    (re.compile(r"\btomorrow\b", re.IGNORECASE), "on {next}"),
     (re.compile(r"\btonight\b", re.IGNORECASE), "on {today} night"),
     (re.compile(r"\bthis morning\b", re.IGNORECASE), "on {today} morning"),
     (re.compile(r"\btoday\b", re.IGNORECASE), "on {today}"),
@@ -137,9 +139,13 @@ def absolutize(summary: str, sim_time: int) -> str:
         return summary
     today = to_datetime(sim_time)
     prev = to_datetime(max(0, sim_time - SECONDS_PER_DAY))
+    nxt = to_datetime(sim_time + SECONDS_PER_DAY)
     for rx, tmpl in _RELATIVE_TIME:
         summary = rx.sub(
-            tmpl.format(prev=f"{prev:%a %d %b}", today=f"{today:%a %d %b}"), summary
+            tmpl.format(
+                prev=f"{prev:%a %d %b}", today=f"{today:%a %d %b}", next=f"{nxt:%a %d %b}"
+            ),
+            summary,
         )
     return summary
 
