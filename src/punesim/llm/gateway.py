@@ -11,6 +11,7 @@ recorded nondeterminism when a log is attached.
 """
 
 import json
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import blake2b
@@ -50,6 +51,23 @@ _CLASS_ROUTE = {
     "digest": "flash",
     "compiler": "workhorse",
 }
+
+
+TRANSPORT_ATTEMPTS = 3
+TRANSPORT_BACKOFF_S = 2.0
+# Names rather than imported classes: the transport is pluggable, and a test
+# double's errors should be classifiable without importing anyone's SDK.
+_TRANSIENT = (
+    "apiconnectionerror", "apitimeouterror", "connectionerror", "timeout",
+    "internalservererror", "ratelimiterror", "serviceunavailable",
+    "remotedisconnected", "protocolerror",
+)
+
+
+def _is_transient(err: Exception) -> bool:
+    """Worth trying again unchanged: the network, not the model."""
+    name = type(err).__name__.lower()
+    return any(m in name for m in _TRANSIENT)
 
 
 class RefusalError(RuntimeError):
@@ -181,7 +199,23 @@ class Gateway:
         rec = self.cassette.get(rid)
         if rec is not None:  # already recorded — reuse, keeps re-runs free
             return rid, rec.response, rec.usage
-        text, usage = self._transport(model, messages, temperature, max_tokens)
+        # A dropped connection is not an answer. It is the one failure worth
+        # retrying identically — nothing was recorded, so the request_id is
+        # unchanged and replay is unaffected. A single network blip cost the
+        # third soak every scene on day 15; a refusal or a bad schema still
+        # gets exactly one distinct-slot attempt higher up, never a loop here.
+        last: Exception | None = None
+        for i in range(TRANSPORT_ATTEMPTS):
+            try:
+                text, usage = self._transport(model, messages, temperature, max_tokens)
+                break
+            except Exception as err:
+                if not _is_transient(err) or i == TRANSPORT_ATTEMPTS - 1:
+                    raise
+                last = err
+                time.sleep(TRANSPORT_BACKOFF_S * (2**i))
+        else:  # pragma: no cover — the loop always breaks or raises
+            raise last or RuntimeError("transport exhausted")
         if self.cfg.llm_mode == "record":
             self.cassette.put(
                 rid,

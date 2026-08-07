@@ -163,3 +163,47 @@ def test_a_literal_newline_inside_a_narration_is_not_a_failure(tmp_path):
     r = g.call("scene", MSGS, SceneOut)
     assert r.status == "ok" and len(t.calls) == 1
     assert r.parsed.outcome == "he came\nhome late"
+
+
+def test_a_dropped_connection_is_retried_identically(tmp_path, monkeypatch):
+    """A network blip is not an answer. One took out every scene on day 15 of a
+    30-day run; nothing was recorded, so the same request_id can simply be
+    asked again — unlike a refusal or a bad schema, which get one distinct
+    cassette slot and no loop."""
+    import punesim.llm.gateway as gw_mod
+
+    monkeypatch.setattr(gw_mod, "TRANSPORT_BACKOFF_S", 0.0)
+
+    class APIConnectionError(Exception):
+        pass
+
+    class Flaky:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, model, messages, temperature, max_tokens):
+            self.calls += 1
+            if self.calls < 3:
+                raise APIConnectionError("Connection error.")
+            return '{"outcome": "resolved", "mood": 0.0}', {"total_tokens": 10}
+
+    t = Flaky()
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=t)
+    assert g.call("scene", MSGS, SceneOut).parsed.outcome == "resolved"
+    assert t.calls == 3
+
+
+def test_a_real_error_is_not_retried(tmp_path, monkeypatch):
+    import punesim.llm.gateway as gw_mod
+
+    monkeypatch.setattr(gw_mod, "TRANSPORT_BACKOFF_S", 0.0)
+    calls = []
+
+    def broken(model, messages, temperature, max_tokens):
+        calls.append(model)
+        raise ValueError("the prompt is malformed")
+
+    g = Gateway(_cfg(tmp_path, "record"), Cassette(tmp_path / "c.db"), transport=broken)
+    with pytest.raises(ValueError):
+        g.call("scene", MSGS, SceneOut)
+    assert len(calls) == 1, "a bug in our own code must fail fast, not three times"
