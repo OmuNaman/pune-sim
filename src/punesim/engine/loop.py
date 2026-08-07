@@ -8,7 +8,7 @@ from ..llm.gateway import CassetteMiss, Gateway
 from ..minds import info as info_mod
 from ..population.synth import Household, Person
 from ..world import hazards as hazards_mod
-from ..world.block import Block
+from ..world.block import DEFAULT_BLOCK, Block
 from ..world.schedule import TimedEvent, roaming_worksites
 from .bend import _apply_beliefs, _apply_stays, _apply_zones
 from .day import _apply_admissions, _commit, _compile_day, _compile_override, _sorted
@@ -35,6 +35,7 @@ def run_simulation(
     hazards: bool = False,
     follow: tuple[str, ...] = (),
     talk: bool = True,
+    block_name: str = DEFAULT_BLOCK,
 ) -> tuple[int, SimState]:
     """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
     + sampled hazards -> split-commit with reaction scenes -> INFO propagation
@@ -49,11 +50,17 @@ def run_simulation(
             state.pressures[p.id] = {"p_health": 0.1, "p_financial": proc_mod.p_financial(f)}
     total = 0
     if start_day == 0:  # self-describing log: a db alone is enough to branch it
+        meta = {"seed": run_seed, "households": len(households), "days": days,
+                "follow": list(follow)}
+        # The block belongs in meta because re-synthesising a 12k-household
+        # oldcity run against the default kasba pool would silently produce a
+        # different population. Recorded only when it is NOT the default, so
+        # every existing log's run.meta payload — and the determinism hash the
+        # V0-V2 soaks were measured against — stays byte-identical.
+        if block_name != DEFAULT_BLOCK:
+            meta["block"] = block_name
         log.commit([EventIn(
-            type="run.meta", sim_time=0,
-            payload={"seed": run_seed, "households": len(households), "days": days,
-                     "follow": list(follow)},
-            provenance="system",
+            type="run.meta", sim_time=0, payload=meta, provenance="system",
         )])
         total += 1
     hh_of_person = {p.id: p.household_id for p in people.values()}

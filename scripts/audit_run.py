@@ -789,11 +789,13 @@ def main() -> int:
         return 2
 
     seed, households = args.seed, args.households
+    block_name = "kasba"  # overridden by run.meta below; see engine/loop.py
     followed: set[str] = set(args.follow or [])
     meta = [e for e in events if e.type == "run.meta"]
     corroborated = False
     if meta:
         m = meta[0].payload
+        block_name = m.get("block", "kasba")
         if m.get("seed") != seed or m.get("households") != households:
             print(
                 f"audit: run.meta says seed={m.get('seed')} households={m.get('households')}, "
@@ -808,7 +810,7 @@ def main() -> int:
         followed.discard("")
 
     try:
-        block = load_for(households)
+        block = load_for(households, block_name)
         hhs, people = synthesize(seed, block, n_households=households)
     except Exception as err:  # noqa: BLE001 — a bad roster invalidates everything
         print(f"audit: cannot regenerate the population: {err}", file=sys.stderr)

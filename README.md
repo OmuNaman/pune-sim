@@ -97,6 +97,10 @@ uv run pytest -q                       # 108 tests, no API key needed
 # the whole block breathing, zero LLM calls, deterministic
 uv run punesim run --days 7 --db runs/dev/events.db
 
+# the V3 world: four peths, 12k households, 46,671 people — still zero LLM,
+# ~73s per sim-day (`--block kasba` is the default and stays the frozen pin)
+uv run punesim run --days 7 --households 12000 --block oldcity --db runs/oldcity/events.db
+
 # with minds: morning scenes for the attention-gated households
 uv run punesim run --days 30 --scenes --follow hh:000 --db runs/soak/events.db
 

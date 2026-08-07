@@ -255,6 +255,7 @@ def main() -> int:
     ap.add_argument("--household", default="hh:000")
     ap.add_argument("--seed", type=int, default=108)
     ap.add_argument("--households", type=int, default=80)
+    ap.add_argument("--block", default="kasba", help="kasba | oldcity (normally taken from run.meta)")
     ap.add_argument("--batch", type=int, default=6, help="scenes per judge call")
     ap.add_argument("--out", type=Path, default=None, help="write findings as JSON")
     args = ap.parse_args()
@@ -267,7 +268,7 @@ def main() -> int:
         print("continuity: no OPENROUTER_API_KEY — this check needs a judge model", file=sys.stderr)
         return 2
 
-    block = load_for(args.households)
+    block = load_for(args.households, getattr(args, 'block', 'kasba'))
     hhs, people = synthesize(args.seed, block, n_households=args.households)
     hh = next((h for h in hhs if h.id == args.household), None)
     if hh is None:

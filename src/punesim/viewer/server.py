@@ -221,8 +221,9 @@ class CompileBody(BaseModel):
     day: int = 0
 
 
-def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> FastAPI:
-    block = load_for(n_households)
+def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
+               block: str = "kasba") -> FastAPI:
+    block = load_for(n_households, block)
     households, people = synthesize(seed, block, n_households=n_households)
 
     place_names = {p.id: (p.name or p.kind) for p in [*block.places, *block.homes]}

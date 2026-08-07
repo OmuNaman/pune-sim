@@ -30,6 +30,7 @@ def run(
     hazards: bool = typer.Option(True, "--hazards/--no-hazards", help="Sample random hazards (V1 un-injected ripples)"),
     follow: list[str] = typer.Option(None, "--follow", help="Household or person id rendered every day, ADDITIVE to k (repeatable; raises cost and narrows coverage of everyone else)"),
     talk: bool = typer.Option(True, "--talk/--no-talk", help="Render the day's one cross-household exchange (needs --scenes; one extra call/day)"),
+    block: str = typer.Option("kasba", help="Named world block: kasba (the V0-V2 pin) | oldcity (V3's four peths)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
@@ -51,8 +52,8 @@ def run(
         if p.exists():
             p.unlink()
 
-    block = load_for(households)
-    hhs, people = synthesize(run_seed, block, n_households=households)
+    world = load_for(households, block)
+    hhs, people = synthesize(run_seed, world, n_households=households)
     log = EventLog(path)
 
     injections = None
@@ -61,12 +62,12 @@ def run(
     gateway = Gateway(cfg, Cassette(cfg.cassette_path), log=log) if scenes else None
 
     n, _state = engine.run_simulation(
-        log, run_seed, block, hhs, people,
+        log, run_seed, world, hhs, people,
         days=days, gateway=gateway, scenes_k=k,
         scene_gate_mode=cfg.scene_gate_mode, injections=injections,
-        hazards=hazards, follow=tuple(follow or ()), talk=talk,
+        hazards=hazards, follow=tuple(follow or ()), talk=talk, block_name=block,
     )
-    typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}")
+    typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}  block={block}")
     typer.echo(f"events committed : {n} over {days} day(s)"
                + (f"  (scenes on, k={k}, gate={cfg.scene_gate_mode})" if scenes else "  (zero LLM)"))
     if injections:
@@ -185,7 +186,8 @@ def follow(
 
 
 @app.command()
-def census(seed: int = typer.Option(None), households: int = typer.Option(80)) -> None:
+def census(seed: int = typer.Option(None), households: int = typer.Option(80),
+           block: str = typer.Option("kasba", help="kasba | oldcity")) -> None:
     """Summarize the synthesized population (regenerated from the seed)."""
     from collections import Counter
 
@@ -195,8 +197,8 @@ def census(seed: int = typer.Option(None), households: int = typer.Option(80)) -
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
-    block = load_for(households)
-    hhs, people = synthesize(run_seed, block, n_households=households)
+    world = load_for(households, block)
+    hhs, people = synthesize(run_seed, world, n_households=households)
     typer.echo(f"seed={run_seed}: {len(hhs)} households, {len(people)} people")
     typer.echo(f"templates : {dict(Counter(h.template for h in hhs))}")
     typer.echo(f"religion  : {dict(Counter(p.religion for p in people.values()))}")
@@ -212,6 +214,7 @@ def serve(
     seed: int = typer.Option(None),
     port: int = typer.Option(8618),
     households: int = typer.Option(80),
+    block: str = typer.Option("kasba", help="kasba | oldcity"),
 ) -> None:
     """Serve the map viewer at http://127.0.0.1:<port>."""
     import uvicorn
@@ -222,7 +225,7 @@ def serve(
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
     application = create_app(
-        db, run_seed, n_households=households,
+        db, run_seed, n_households=households, block=block,
         cfg=cfg if cfg.openrouter_api_key else None,
     )
     typer.echo(f"Pune Sim viewer -> http://127.0.0.1:{port}  (log: {db}, seed: {run_seed})")
@@ -236,6 +239,7 @@ def compile(
     save: str = typer.Option(None, help="append the compiled injection to this scenario JSON"),
     seed: int = typer.Option(None),
     households: int = typer.Option(80),
+    blk: str = typer.Option("kasba", "--block", help="kasba | oldcity"),
 ) -> None:
     """Compile free text into a grounded, validated injection (V2)."""
     from pathlib import Path
@@ -251,7 +255,7 @@ def compile(
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
-    block = load_for(households)
+    block = load_for(households, blk)
     _, people = synthesize(run_seed, block, n_households=households)
     gateway = Gateway(cfg, Cassette(cfg.cassette_path))
     console = Console()
@@ -318,7 +322,7 @@ def branch(
     if meta is None:
         console.print("[red]source log has no run.meta — re-run it once on this version first[/red]")
         raise typer.Exit(1)
-    block = load_for(int(meta["households"]))
+    block = load_for(int(meta["households"]), meta.get("block", "kasba"))
     _, people = synthesize(int(meta["seed"]), block, n_households=int(meta["households"]))
 
     extra: list[engine.Injection] = []
@@ -384,7 +388,7 @@ def diff(
     meta = branch_mod.read_meta(log_a) or {}
     run_seed = seed if seed is not None else int(meta.get("seed", cfg.run_seed))
     n_hh = int(meta.get("households", households))
-    block = load_for(n_hh)
+    block = load_for(n_hh, meta.get("block", "kasba"))
     _, people = synthesize(run_seed, block, n_households=n_hh)
     names = {p.id: p.name for p in people.values()}
     rep = diff_logs(log_a, log_b, names)
