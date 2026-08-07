@@ -35,7 +35,7 @@ from punesim.kernel.timebase import SECONDS_PER_DAY, to_datetime
 from punesim.llm import Cassette, Gateway
 from punesim.minds.scene import _humanize
 from punesim.population import synthesize
-from punesim.world.block import Block
+from punesim.world.block import load_for
 
 SYSTEM = """You are auditing a life simulation for CONTINUITY, the way a script supervisor audits
 a film. You are given (1) the CANON — a family's roster and every fact the simulation's event log
@@ -267,7 +267,7 @@ def main() -> int:
         print("continuity: no OPENROUTER_API_KEY — this check needs a judge model", file=sys.stderr)
         return 2
 
-    block = Block.load()
+    block = load_for(args.households)
     hhs, people = synthesize(args.seed, block, n_households=args.households)
     hh = next((h for h in hhs if h.id == args.household), None)
     if hh is None:

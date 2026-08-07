@@ -37,7 +37,7 @@ from punesim.institutions.procedures import ABSENT_ACTIVITIES
 from punesim.kernel.timebase import SECONDS_PER_DAY
 from punesim.minds.scene import _SELF_OUTPUT_TYPES
 from punesim.population import synthesize
-from punesim.world.block import Block
+from punesim.world.block import Block, load_for
 
 # Rate card, $/M tokens (openrouter, pinned 2026-08). Used only when the
 # provider did not report a cost, and reported cost always wins.
@@ -808,7 +808,7 @@ def main() -> int:
         followed.discard("")
 
     try:
-        block = Block.load()
+        block = load_for(households)
         hhs, people = synthesize(seed, block, n_households=households)
     except Exception as err:  # noqa: BLE001 — a bad roster invalidates everything
         print(f"audit: cannot regenerate the population: {err}", file=sys.stderr)

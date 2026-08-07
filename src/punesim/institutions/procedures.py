@@ -261,6 +261,16 @@ def daily_finance_tick(
     for p in people.values():
         by_hh.setdefault(p.household_id, []).append(p)
 
+    # Today's discharges, indexed by household. This used to be a linear scan of
+    # the whole day's log *inside* the per-household loop — 1280 households x
+    # 23k events is 29M comparisons a day to find the two or three that matter.
+    discharges: dict[str, list] = {}
+    for e in log_events_today:
+        if e.type == "hospital.discharged":
+            discharges.setdefault(e.payload.get("household"), []).append(e)
+
+    from ..engine import DAILY_WAGE  # single source for the wage split
+
     for hid in sorted(state.finances):
         f = state.finances[hid]
         earned = 0.0
@@ -269,32 +279,29 @@ def daily_finance_tick(
             if income <= 0:
                 continue
             daily = income / WORK_DAYS_PER_MONTH
-            from ..engine import DAILY_WAGE  # single source for the wage split
-
             if p.occupation in DAILY_WAGE:
                 earned += 0.0 if p.id in absent else daily  # no work, no wage
             else:
                 earned += daily  # a salaried month survives a few sick days
         f.liquid += earned + f.monthly_support / 30.0 - f.monthly_costs / 30.0
 
-        for e in log_events_today:
-            if e.type == "hospital.discharged" and e.payload.get("household") == hid:
-                bill = float(e.payload.get("bill") or 0)
-                f.liquid -= bill
+        for e in discharges.get(hid, ()):
+            bill = float(e.payload.get("bill") or 0)
+            f.liquid -= bill
+            out.append((TimedEvent(
+                t_night - 60, "money.paid",
+                {"household": hid, "amount": bill, "reason": "hospital bill"}, e.seq,
+            ), e.seq))
+            if f.liquid < 0:
+                principal = float(round(-f.liquid + 2000, -2))
+                f.liquid += principal
+                f.loans += principal
                 out.append((TimedEvent(
-                    t_night - 60, "money.paid",
-                    {"household": hid, "amount": bill, "reason": "hospital bill"}, e.seq,
+                    t_night - 30, "loan.taken",
+                    {"household": hid, "principal": principal,
+                     "lender": "org:moneylender", "monthly_rate": LOAN_MONTHLY_RATE},
+                    e.seq,
                 ), e.seq))
-                if f.liquid < 0:
-                    principal = float(round(-f.liquid + 2000, -2))
-                    f.liquid += principal
-                    f.loans += principal
-                    out.append((TimedEvent(
-                        t_night - 30, "loan.taken",
-                        {"household": hid, "principal": principal,
-                         "lender": "org:moneylender", "monthly_rate": LOAN_MONTHLY_RATE},
-                        e.seq,
-                    ), e.seq))
 
         if f.loans > 0 and day and day % 30 == 0:
             interest = round(f.loans * LOAN_MONTHLY_RATE, -1)

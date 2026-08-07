@@ -129,6 +129,10 @@ def witness_tiers(
         return []
     lo, hi = t_abs - WITNESS_PAD_S, t_abs + WITNESS_PAD_S
     out: list[tuple[str, float]] = []
+    # A block has ~100 places and, at peth scale, tens of thousands of spans.
+    # Measuring the same handful of distances once per span cost 870k haversines
+    # in a 3-day probe; there are only ever as many answers as there are places.
+    dist: dict[str, float | None] = {}
     for pid in sorted(intervals):
         if pid in exclude or people[pid].age < 6:
             continue
@@ -136,10 +140,12 @@ def witness_tiers(
         for pl, t0, t1 in intervals[pid]:
             if t1 < lo or t0 > hi:
                 continue
-            here = block.get(pl)
-            if here is None:
+            if pl not in dist:
+                here = block.get(pl)
+                dist[pl] = None if here is None else haversine_m(src.lat, src.lon, here.lat, here.lon)
+            d = dist[pl]
+            if d is None:
                 continue
-            d = haversine_m(src.lat, src.lon, here.lat, here.lon)
             if pl == place_id:
                 best = max(best, 0.85)
             elif shape == "point" and d <= NEARBY_M:

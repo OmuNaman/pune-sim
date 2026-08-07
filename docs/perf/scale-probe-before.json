@@ -1,0 +1,25 @@
+{
+  "days": 4,
+  "seed": 108,
+  "rows": [
+    {
+      "households": 2880,
+      "people": 11240,
+      "places": 124,
+      "days": 4,
+      "setup_s": 0.425,
+      "total_s": 198.745,
+      "s_per_day": 49.686,
+      "events": 208963,
+      "events_per_day": 52240.8,
+      "peak_rss_mb": 440.8,
+      "copresence_windows": 10109702,
+      "copresence_per_day": 2527425.5,
+      "max_windows_in_a_day": 2529928,
+      "worst_place": "place:node/3681735096",
+      "worst_place_windows": 1599366,
+      "max_co_present_at_one_place": 1789,
+      "hash": "ac1ba94245d30bd4313e93ee1080d0031b5f284e64734044105152e6994a4781"
+    }
+  ]
+}

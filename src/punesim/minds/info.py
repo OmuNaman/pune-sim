@@ -13,7 +13,9 @@ rumor never perturbs unrelated draws, and replay is hash-identical.
 """
 
 import math
+from bisect import bisect_left
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 
 from ..kernel.rng import keyed_rng
 from ..kernel.timebase import SECONDS_PER_DAY
@@ -99,8 +101,15 @@ class Traits:
     conscientiousness: float
 
 
+@lru_cache(maxsize=1 << 17)
 def traits(run_seed: int, person_id: str) -> Traits:
-    """Timeless per-person scalars; derived, never stored (D0 is a function)."""
+    """Timeless per-person scalars; derived, never stored (D0 is a function).
+
+    Memoised because it is a pure function of its key and the info lane asks for
+    the same person's traits thousands of times a day — 56k calls in a 4-day
+    probe, each one building a fresh Philox generator, which is the single most
+    expensive thing this codebase does per call.
+    """
     rng = keyed_rng(run_seed, "traits", person_id, 0, "base")
     v = rng.random(3)
     return Traits(sociability=float(v[0]), credulity=float(v[1]), conscientiousness=float(v[2]))
@@ -346,10 +355,29 @@ def presence_intervals(
     return out
 
 
+# A crowd is not a room. Below this many place-spans in a day every overlapping
+# pair is enumerated, exactly as V0-V2 did and as the 30-day soaks validated
+# (the busiest place in an 80-household run holds 92). Above it, all-pairs is
+# both unaffordable and untrue: a 2880-household probe already emitted 2.5M
+# windows a day, a peth would emit tens of millions, and nobody exchanges news
+# with three thousand strangers because they passed through the same market.
+CROWD_EXACT_SPANS = 128
+CONTACTS_IN_A_CROWD = 12  # how many of a crowd one person actually engages
+
+
 def _copresence_windows(
     intervals: dict[str, list[tuple[str, int, int]]],
+    run_seed: int = 0,
+    day: int = 0,
 ) -> list[tuple[int, int, str, str, str]]:
-    """Sorted (start, end, place, a, b) windows with overlap >= MIN_OVERLAP_S."""
+    """Sorted (start, end, place, a, b) windows with overlap >= MIN_OVERLAP_S.
+
+    Quiet places are exact. In a crowd each span takes at most
+    CONTACTS_IN_A_CROWD partners by keyed draw from the people it overlaps, so
+    contact count is bounded by attention rather than by footfall. The draw is
+    forward-only (a span samples partners that start after it), so a person's
+    expected degree is about twice the cap, not exactly it.
+    """
     at_place: dict[str, list[tuple[int, int, str]]] = {}
     for pid in sorted(intervals):
         for place, a0, a1 in intervals[pid]:
@@ -357,10 +385,22 @@ def _copresence_windows(
     windows: list[tuple[int, int, str, str, str]] = []
     for place in sorted(at_place):
         spans = sorted(at_place[place])
+        starts = [s[0] for s in spans]
+        crowded = len(spans) > CROWD_EXACT_SPANS
         for i, (a0, a1, pa) in enumerate(spans):
-            for b0, b1, pb in spans[i + 1:]:
-                if b0 >= a1:
-                    break
+            # Spans are sorted by start, so everyone who can still overlap is
+            # the contiguous run up to the first span starting at or after a1.
+            # This used to be a slice-and-break, which copied the tail of the
+            # list once per span — quadratic in memory traffic before it was
+            # quadratic in work.
+            end = bisect_left(starts, a1, i + 1)
+            if crowded and end - (i + 1) > CONTACTS_IN_A_CROWD:
+                rng = keyed_rng(run_seed, "copresence", f"{place}|{pa}|{a0}", day, "contacts")
+                picks = sorted(set(rng.integers(i + 1, end, CONTACTS_IN_A_CROWD).tolist()))
+            else:
+                picks = range(i + 1, end)
+            for j in picks:
+                b0, b1, pb = spans[j]
                 lo, hi = max(a0, b0), min(a1, b1)
                 if hi - lo >= MIN_OVERLAP_S and pa != pb:
                     windows.append((lo, hi, place, *sorted((pa, pb))))
@@ -374,6 +414,8 @@ def _try_share(
     """All claims `sharer` passes to `receiver` at time t (keyed draws)."""
     out: list[Heard] = []
     holdings = state.holdings.get(sharer, {})
+    if not holdings:
+        return out
     for key in sorted(holdings):
         h = holdings[key]
         if t < h.heard_abs:  # can't retell what you haven't heard yet
@@ -441,7 +483,15 @@ def propagate_day(
     commits each hop so its seq can anchor the next hop's caused_by."""
     state.reset_day()
     heard: list[Heard] = []
-    for lo, hi, _place, pa, pb in _copresence_windows(intervals):
+    holdings = state.holdings
+    for lo, hi, _place, pa, pb in _copresence_windows(intervals, run_seed, day):
+        # Two people who both know nothing cannot tell each other anything, and
+        # in a crowded place they are the overwhelming majority of pairs: at
+        # 5000 people this guard is the difference between 4.3M _try_share
+        # calls and a few thousand. Equivalent, not approximate — _try_share
+        # draws no keyed randomness before its first holding.
+        if not holdings.get(pa) and not holdings.get(pb):
+            continue
         t = (lo + hi) // 2
         for sharer, receiver in ((pa, pb), (pb, pa)):
             heard.extend(_try_share(state, run_seed, day, block, sharer, receiver, "f2f", t, commit_heard))

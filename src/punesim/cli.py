@@ -40,7 +40,7 @@ def run(
     from punesim.kernel.log import EventLog
     from punesim.llm import Cassette, Gateway
     from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.block import load_for
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
@@ -51,7 +51,7 @@ def run(
         if p.exists():
             p.unlink()
 
-    block = Block.load()
+    block = load_for(households)
     hhs, people = synthesize(run_seed, block, n_households=households)
     log = EventLog(path)
 
@@ -191,11 +191,11 @@ def census(seed: int = typer.Option(None), households: int = typer.Option(80)) -
 
     from punesim import config
     from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.block import load_for
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
-    block = Block.load()
+    block = load_for(households)
     hhs, people = synthesize(run_seed, block, n_households=households)
     typer.echo(f"seed={run_seed}: {len(hhs)} households, {len(people)} people")
     typer.echo(f"templates : {dict(Counter(h.template for h in hhs))}")
@@ -247,11 +247,11 @@ def compile(
     from punesim.llm import Cassette, Gateway
     from punesim.minds.compiler import CompileError, compile_injection
     from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.block import load_for
 
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
-    block = Block.load()
+    block = load_for(households)
     _, people = synthesize(run_seed, block, n_households=households)
     gateway = Gateway(cfg, Cassette(cfg.cassette_path))
     console = Console()
@@ -308,17 +308,17 @@ def branch(
     from punesim.llm import Cassette, Gateway
     from punesim.minds.compiler import CompileError, compile_injection
     from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.block import load_for
 
     console = Console()
     cfg = config.from_env()
-    block = Block.load()
     src_log = EventLog(source)
     meta = branch_mod.read_meta(src_log)
     src_log.close()
     if meta is None:
         console.print("[red]source log has no run.meta — re-run it once on this version first[/red]")
         raise typer.Exit(1)
+    block = load_for(int(meta["households"]))
     _, people = synthesize(int(meta["seed"]), block, n_households=int(meta["households"]))
 
     extra: list[engine.Injection] = []
@@ -376,7 +376,7 @@ def diff(
     from punesim.kernel.diff import diff_logs
     from punesim.kernel.log import EventLog
     from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.block import load_for
 
     console = Console()
     cfg = config.from_env()
@@ -384,7 +384,7 @@ def diff(
     meta = branch_mod.read_meta(log_a) or {}
     run_seed = seed if seed is not None else int(meta.get("seed", cfg.run_seed))
     n_hh = int(meta.get("households", households))
-    block = Block.load()
+    block = load_for(n_hh)
     _, people = synthesize(run_seed, block, n_households=n_hh)
     names = {p.id: p.name for p in people.values()}
     rep = diff_logs(log_a, log_b, names)

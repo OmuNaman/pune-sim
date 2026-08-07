@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from ..kernel.log import EventLog
 from ..kernel.timebase import SECONDS_PER_DAY, to_datetime
 from ..population import synthesize
-from ..world.block import Block
+from ..world.block import Block, load_for
 
 STATIC = Path(__file__).parent / "static"
 
@@ -222,7 +222,7 @@ class CompileBody(BaseModel):
 
 
 def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None) -> FastAPI:
-    block = Block.load()
+    block = load_for(n_households)
     households, people = synthesize(seed, block, n_households=n_households)
 
     place_names = {p.id: (p.name or p.kind) for p in [*block.places, *block.homes]}

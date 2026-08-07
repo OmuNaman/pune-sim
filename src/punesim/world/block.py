@@ -47,6 +47,11 @@ _KIND_BY_AMENITY = {
 
 _HOME_BUILDINGS = {"yes", "house", "residential", "apartments", "detached", "terrace"}
 
+# The home pool is capped so that `synthesize` draws the same permutation for a
+# given seed no matter how many candidates the extract happens to contain. Grow
+# it only when a run needs more households than the cap — see `load_for`.
+DEFAULT_MAX_HOMES = 400
+
 
 @dataclass(frozen=True)
 class Place:
@@ -100,6 +105,12 @@ class Block:
         self.places = places
         self.homes = homes
         self._by_id = {p.id: p for p in [*places, *homes]}
+        # The block never changes after load, so "which places are shops" and
+        # "which shop is nearest this home" are constants. Recomputing them per
+        # call meant a haversine to every place, every errand, every day: 1.5M
+        # distance calculations in a 4-day 11k-person probe.
+        self._of_kind: dict[frozenset[str], list[Place]] = {}
+        self._nearest: dict[tuple[str, frozenset[str]], Place | None] = {}
 
     def __getitem__(self, place_id: str) -> Place:
         return self._by_id[place_id]
@@ -108,14 +119,24 @@ class Block:
         return self._by_id.get(place_id)
 
     def of_kind(self, *kinds: str) -> list[Place]:
-        return [p for p in self.places if p.kind in kinds]
+        key = frozenset(kinds)
+        hit = self._of_kind.get(key)
+        if hit is None:
+            hit = self._of_kind[key] = [p for p in self.places if p.kind in kinds]
+        return hit
 
     def nearest(self, from_id: str, *kinds: str) -> Place | None:
+        key = (from_id, frozenset(kinds))
+        if key in self._nearest:  # None is a real answer, so `in`, not `.get`
+            return self._nearest[key]
         src = self._by_id[from_id]
         candidates = self.of_kind(*kinds)
-        if not candidates:
-            return None
-        return min(candidates, key=lambda p: (haversine_m(src.lat, src.lon, p.lat, p.lon), p.id))
+        found = (
+            min(candidates, key=lambda p: (haversine_m(src.lat, src.lon, p.lat, p.lon), p.id))
+            if candidates else None
+        )
+        self._nearest[key] = found
+        return found
 
     def walk_seconds(self, a_id: str, b_id: str) -> int:
         a, b = self._by_id[a_id], self._by_id[b_id]
@@ -127,7 +148,7 @@ class Block:
         cls,
         places_path: str | Path = "data/anchors/kasba_places.geojson",
         *,
-        max_homes: int = 400,
+        max_homes: int = DEFAULT_MAX_HOMES,
     ) -> "Block":
         data = orjson.loads(Path(places_path).read_bytes())
         places: list[Place] = []
@@ -152,3 +173,14 @@ class Block:
         places.sort(key=lambda p: p.id)
         homes.sort(key=lambda p: p.id)
         return cls(places, homes[:max_homes])
+
+
+def load_for(n_households: int, **kw) -> Block:
+    """The block a run of this size needs.
+
+    Below the cap this is exactly `Block.load()`, so every existing run keeps
+    its determinism hash; above it the pool grows to fit. Home assignment is a
+    permutation over the whole pool, so *any* change to the pool size reshuffles
+    everyone — which is why the cap does not simply track the extract.
+    """
+    return Block.load(max_homes=max(DEFAULT_MAX_HOMES, n_households), **kw)
