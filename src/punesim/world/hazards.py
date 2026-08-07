@@ -44,6 +44,43 @@ class Hazard:
     participants: tuple[str, ...]  # directly struck (point hazards only)
 
 
+def _audience_sizes(
+    t_abs: int, shape: str, block: Block, people: dict[str, Person],
+    intervals: dict[str, list[tuple[str, int, int]]],
+) -> dict[str, int]:
+    """How many people would perceive a hazard at each named place, at once.
+
+    Same predicate as `witness_tiers`, asked the other way round. Asking it
+    forwards means scanning every person for every candidate venue: 438 places
+    x 24,716 people is 10.8M person-checks each time a hazard fires, which was
+    ~16 seconds a hazard at V3 scale. Inverted, one pass over the spans that
+    overlap the window puts people at places, and each place then only looks at
+    the handful of venues within earshot.
+    """
+    lo, hi = t_abs - WITNESS_PAD_S, t_abs + WITNESS_PAD_S
+    here: dict[str, set[str]] = {}
+    for pid, spans in intervals.items():
+        person = people.get(pid)
+        if person is None or person.age < 6:
+            continue
+        for pl, t0, t1 in spans:
+            if t1 < lo or t0 > hi:
+                continue
+            here.setdefault(pl, set()).add(pid)
+    reach = NEARBY_M if shape == "point" else AREA_M
+    named = [p for p in block.places if p.name]
+    audience: dict[str, set[str]] = {p.id: set() for p in named}
+    for pl, folk in here.items():
+        src = block.get(pl)
+        for cand in named:
+            if cand.id == pl or (
+                src is not None
+                and haversine_m(src.lat, src.lon, cand.lat, cand.lon) <= reach
+            ):
+                audience[cand.id] |= folk
+    return {k: len(v) for k, v in audience.items()}
+
+
 def sample_day(
     run_seed: int,
     day: int,
@@ -70,10 +107,8 @@ def sample_day(
         if rng.random() >= rate:
             continue
         t_abs = day * SECONDS_PER_DAY + w0 + int(rng.integers(0, max(1, (w1 - w0) // 60))) * 60
-        live = [
-            p for p in named
-            if len(witness_tiers(p.id, t_abs, shape, block, people, intervals)) >= MIN_AUDIENCE
-        ]
+        sizes = _audience_sizes(t_abs, shape, block, people, intervals)
+        live = [p for p in named if sizes.get(p.id, 0) >= MIN_AUDIENCE]
         if not live:
             continue  # nobody would perceive it; do not fabricate a hazard
         place = live[int(rng.integers(0, len(live)))]
