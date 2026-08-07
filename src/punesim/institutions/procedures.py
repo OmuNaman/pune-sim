@@ -24,6 +24,8 @@ from ..minds.info import InfoState
 from ..population.synth import Household, Person
 from ..world.block import Block
 from ..world.schedule import TimedEvent
+from . import interpreter
+from .catalog import CATALOG
 
 # ₹/month, rough Kasba texture (finances-lite; replaced by real ledgers at V3)
 MONTHLY_INCOME = {
@@ -47,7 +49,6 @@ COST_PER_HEAD = 5200.0
 # this, every student household ran a pure deficit and starved on schedule.
 PG_REMITTANCE = (9000.0, 14000.0)
 LOAN_MONTHLY_RATE = 0.03  # the moneylender's rate; banks come with V3
-FIR_SEVERITY_MIN = 0.4
 
 # Evidence that a workday was LOST. Everything else counts as worked.
 #
@@ -160,88 +161,27 @@ def step(
     info: InfoState,
 ) -> dict[int, list[TimedEvent]]:
     """Scan today's committed events; schedule the institutions' futures.
-    Returns {future_day: [TimedEvent]} for the engine's pending queue."""
-    pending: dict[int, list[TimedEvent]] = {}
+    Returns {future_day: [TimedEvent]} for the engine's pending queue.
 
-    def later(d: int, te: TimedEvent) -> None:
-        pending.setdefault(d, []).append(te)
-
-    intensity_today = {
-        e.payload.get("entity_id"): float(e.payload.get("intensity") or 0.5)
-        for e in log_events_today
-        if e.type == "condition.set" and e.payload.get("kind") == "injury"
-    }
-
-    for e in log_events_today:
-        # --- hospital: stay, staged healing, discharge with a bill ----------
-        if e.type == "hospital.admitted" and e.seq not in state.billed:
-            state.billed.add(e.seq)
-            pid = e.payload["person"]
-            sev = intensity_today.get(pid, 0.5)
-            rng = keyed_rng(run_seed, "hospital", pid, day, "stay")
-            stay = 1 + int(sev * 3 + rng.random() * 2)
-            bill = float(round(3000 + sev * 30000 + rng.random() * 4000, -2))
-            d_dis = day + stay
-            t_dis = d_dis * SECONDS_PER_DAY + 10 * 3600
-            later(d_dis, TimedEvent(
-                t_dis, "hospital.discharged",
-                {"person": pid, "place": e.payload.get("place"), "bill": bill,
-                 "household": people[pid].household_id if pid in people else None},
-                e.seq,
-            ))
-            later(d_dis, TimedEvent(
-                t_dis + 60, "condition.set",
-                {"entity_id": pid, "kind": "injury", "intensity": round(sev * 0.5, 2),
-                 "stage": "recovering"}, e.seq,
-            ))
-            heal = d_dis + max(1, int(sev * 8))
-            later(heal, TimedEvent(
-                heal * SECONDS_PER_DAY + 9 * 3600, "condition.set",
-                {"entity_id": pid, "kind": "injury", "intensity": 0.0, "stage": "healed"},
-                e.seq,
-            ))
-            place = e.payload.get("place") or ""
-            state.in_hospital[pid] = (d_dis, place)
-            state.rest[pid] = max(state.rest.get(pid, 0), d_dis + max(1, (heal - d_dis) // 2))
-
-        # --- police: FIR next morning, from the complainant's own account ---
-        if (
-            e.type.startswith("hazard.")
-            and e.payload.get("participants")
-            and float(e.payload.get("severity") or 0) >= FIR_SEVERITY_MIN
-            and e.seq not in state.fir_filed
-        ):
-            state.fir_filed.add(e.seq)
-            victim = e.payload["participants"][0]
-            person = people.get(victim)
-            if person is None:
-                continue
-            adults = [
-                q.id for q in people.values()
-                if q.household_id == person.household_id and q.age >= 18 and q.id != victim
-            ]
-            complainant = min(adults) if adults else victim
-            station = block.nearest(e.payload.get("place") or person.home_id, "police")
-            claim_key = f"cl:{e.type.split('.', 1)[1]}:{e.payload.get('place')}:d{day}"
-            holding = info.holdings.get(victim, {}).get(claim_key)
-            statement = (
-                holding.claim.text if holding
-                else f"{person.given} was hurt in a {e.type.split('.')[-1].replace('_', ' ')}."
-            )
-            d_fir = day + 1
-            later(d_fir, TimedEvent(
-                d_fir * SECONDS_PER_DAY + 11 * 3600, "police.fir.registered",
-                {"complainant": complainant, "victim": victim,
-                 "station": station.id if station else None,
-                 "about_seq": e.seq, "statement": statement},
-                e.seq,
-            ))
-            later(day + 8, TimedEvent(
-                (day + 8) * SECONDS_PER_DAY + 12 * 3600, "fir.update",
-                {"about_seq": e.seq, "victim": victim, "status": "investigation pending"},
-                e.seq,
-            ))
-    return pending
+    The two procedures this used to spell out by hand now live in
+    `catalog.py` as data; see `interpreter.py` for why.
+    """
+    return interpreter.run(
+        CATALOG,
+        log_events_today,
+        state,
+        {
+            "run_seed": run_seed, "day": day, "block": block,
+            "people": people, "info": info,
+            # today's injuries, so a stay's length can answer to how badly hurt
+            # somebody is rather than to a coin
+            "intensity_today": {
+                e.payload.get("entity_id"): float(e.payload.get("intensity") or 0.5)
+                for e in log_events_today
+                if e.type == "condition.set" and e.payload.get("kind") == "injury"
+            },
+        },
+    )
 
 
 def daily_finance_tick(
