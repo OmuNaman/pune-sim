@@ -346,9 +346,11 @@ def test_the_lights_coming_back_is_news(tmp_path, world):
 def test_every_action_says_whether_it_means_staying_away():
     """The recurring bug in this lane is an action defaulting to avoidance.
 
-    First it was `outage`: a power cut had no action mapped, fell through to
-    DEFAULT_ACTION, and 255 of 306 people stopped going to a place because the
-    lights had been off. Then it was `store_water`, which *is* mapped — but the
+    First it was `outage`: a power cut had no action mapped, fell through to a
+    default of "avoid the place", and 255 of 306 people stopped going somewhere
+    because the lights had been off. That default is gone — an unmapped topic
+    now changes nobody's route — and test_an_unmapped_topic_changes_nobody's_day
+    below keeps it gone. Then it was `store_water`, which *is* mapped — but the
     engine recorded an avoidance for every belief action regardless of which one
     it was, so 1,138 people who filled a drum were also marked as shunning the
     pumping station.
@@ -358,7 +360,6 @@ def test_every_action_says_whether_it_means_staying_away():
     So every action this lane can emit must be classified, one way or the other.
     """
     emitted = {action for action, _threshold in info.ACTION_THRESHOLDS.values()}
-    emitted.add(info.DEFAULT_ACTION[0])
     non_avoiding = {"store_water"}
     unclassified = emitted - info.AVOIDING_ACTIONS - non_avoiding
     assert not unclassified, (
@@ -380,3 +381,36 @@ def test_resuming_a_run_without_its_state_is_refused(tmp_path):
     log = EventLog(tmp_path / "resume.db")
     with pytest.raises(ValueError, match="start_day"):
         engine.run_simulation(log, SEED, block, hhs, people, days=1, start_day=4)
+
+
+def test_an_unmapped_topic_moves_nobody(tmp_path):
+    """A belief with no designed behaviour spreads without rerouting anyone.
+
+    It is still heard, still remembered, still something a scene can be about.
+    What it cannot do is silently acquire a mechanical consequence nobody chose
+    for it — which is how a power cut once emptied a market.
+    """
+    block = Block.load()
+    hhs, people = synthesize(SEED, block, n_households=40)
+    place = block.of_kind("temple", "shop", "market")[0].id
+    inj = engine.Injection(
+        day=0, time_s=19 * 3600, type="info.rumor", place=place,
+        participants=[next(iter(people))],
+        payload={"credence": 0.95, "claim": {
+            "key": "cl:unmapped", "subject": place, "predicate": "dangerous",
+            "topics": ["astrology"],  # nothing in ACTION_THRESHOLDS
+            "charge": 0.9, "specificity": 0.6, "veracity": "false", "valence": -0.8,
+        }},
+    )
+    log = EventLog(tmp_path / "unmapped.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=3, injections=[inj])
+    heard = [e for e in log.events(type="info.heard")
+             if e.payload.get("claim_key") == "cl:unmapped"]
+    acted = [e for e in log.events(type="belief.action")
+             if e.payload.get("claim_key") == "cl:unmapped"]
+    log.close()
+    assert heard, "the claim should still spread — this is not a gag order"
+    assert not acted, (
+        f"{len(acted)} people acted on a topic nothing maps; the sim guessed a "
+        "behaviour for them instead of admitting it has none"
+    )

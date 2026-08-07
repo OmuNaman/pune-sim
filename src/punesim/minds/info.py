@@ -46,7 +46,16 @@ ACTION_THRESHOLDS: dict[str, tuple[str, float]] = {
     "crime": ("avoid_place", 0.7),
     "fraud": ("stop_patronage", 0.7),
 }
-DEFAULT_ACTION = ("avoid_place", 0.7)
+# There is deliberately no default. A claim whose topic nothing maps spreads,
+# is talked about and is remembered — but it changes nobody's route, because
+# the sim was never told what someone would *do* about it.
+#
+# The fallback used to be ("avoid_place", 0.7), and it produced nonsense twice.
+# A power cut fell through it and 255 of 306 people stopped going to a market
+# because the lights had been off — the largest behavioural event in two 30-day
+# soaks. Guessing a specific mechanical behaviour for an arbitrary belief is
+# worse than admitting there is none: the ripple is not lost, it just stays in
+# the gossip and the scenes where it belongs until somebody maps the topic.
 
 # Of the action vocabulary, which ones actually mean "and so I stop going
 # there". Storing water at home does not: it is a thing you do *because* the
@@ -612,11 +621,13 @@ def crossed_actions(state: InfoState, prior_acted: set[tuple[str, str]]) -> list
             h = state.holdings[pid][key]
             if h.claim.valence > -0.1 or h.claim.predicate not in ONGOING_PREDICATES:
                 continue
-            action, threshold = DEFAULT_ACTION
-            for topic in h.claim.topics:
-                if topic in ACTION_THRESHOLDS:
-                    action, threshold = ACTION_THRESHOLDS[topic]
-                    break
+            mapped = next(
+                (ACTION_THRESHOLDS[t] for t in h.claim.topics if t in ACTION_THRESHOLDS),
+                None,
+            )
+            if mapped is None:  # nothing designed; nothing mechanical happens
+                continue
+            action, threshold = mapped
             if h.credence >= threshold:
                 out.append(BeliefAction(pid, key, action, h.claim.subject, h.last_seq or None))
     return out
