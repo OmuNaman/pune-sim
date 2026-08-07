@@ -272,6 +272,23 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   incl. refusal rung 2b, QC), PMTiles viewer. Exit: V0's scenario re-runs
   unchanged on 4 real peths / 12k households; "Old City breathing with zero LLM
   calls" is a *subset* of this exit; <$2/sim-day background.
+
+  *Progress 2026-08-07.* **Step 0 (scale probe, done)** — measured before
+  building, and it changed the order of nothing but saved the rest: the day
+  pipeline was n^1.86 in population and would have cost 12 min/sim-day at V3
+  scale. Three local defects, no architectural limit; see
+  [perf/scale-probe.md](perf/scale-probe.md). The one deliberate behaviour
+  change is a co-presence contact cap — under all-pairs, how many people you
+  exchange news with in a day was a function of how big the city is (20/day at
+  306 people, 225/day at 11k, still climbing), which is wrong on its face.
+  **Step 1 (the V3 block, done)** — `oldcity`, a four-peth extract, opt-in via
+  `--block` so the Kasba pin and every soak hash stay frozen. 12k households /
+  46.7k people run at 74 s/sim-day, n^1.12.
+  **Open, for step 2 (IPF):** synthesised household size is 3.89 against the
+  2011 ward census's 4.48 for these wards — the hand-written
+  `HOUSEHOLD_TEMPLATES` mix is close but not fitted, and fitting it to ward
+  marginals (households, population, sex, 0–6, SC/ST, literacy — all present in
+  `pune_ward_census_2011.csv`) is exactly what the IPF step is for.
 - **V4+ — Arcs, courts, QC depth, scale-out.** 90-day soak, budget governor,
   evaluation harness, full collective dynamics (09), election-class process
   test — note the real Jan 2026 PMC election already happened (41 prabhags),

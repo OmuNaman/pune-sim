@@ -377,6 +377,16 @@ def _copresence_windows(
     contact count is bounded by attention rather than by footfall. The draw is
     forward-only (a span samples partners that start after it), so a person's
     expected degree is about twice the cap, not exactly it.
+
+    KNOWN PROPERTY, deliberate: inside a crowded place this weakens law 4's
+    branch cleanliness. The sampled indices depend on how many people are in the
+    overlapping run, so a branch that moves one extra person into a crowded
+    market changes who *others* there bump into — under all-pairs, adding a
+    person only ever added pairs. Any degree cap must depend on crowd size, so
+    some version of this is unavoidable; the honest fix is per-pair keyed draws,
+    which cost a Philox construction per pair and are therefore exactly the
+    thing being avoided. It does not touch the sizes where branching has been
+    validated: below CROWD_EXACT_SPANS nothing is sampled at all.
     """
     at_place: dict[str, list[tuple[int, int, str]]] = {}
     for pid in sorted(intervals):
