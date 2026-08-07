@@ -338,6 +338,23 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   scenes, so spend tracks attention rather than population; 14 of 12,000
   households were on camera, which is the trade it makes.
 
+  **Cohorts — measured, and one obvious approach ruled out (2026-08-08).** At
+  8,312 people the info lane builds 132k co-presence windows a day, of which
+  **64.5% have neither party carrying any claim**, 14.5% one, 21.1% both; a mean
+  of 25% of the city holds something on a given day. The 64.5% looks like free
+  money — build only the windows that can matter — and it is not. Filtering at
+  generation needs the carrier set up front, and holdings *grow during the day*:
+  someone who hears a rumour at 09:00 passes it on at 14:00, which is what
+  "multi-hop within a day works because windows are processed chronologically"
+  means. Tried it; the determinism hash caught it immediately. Same-day
+  multi-hop is load-bearing and a static carrier set silently removes it.
+
+  So cohorts cannot be a filter on the existing lane — they have to be a
+  different *representation* for people far from attention (a per-claim
+  exposure count rather than per-person holdings), with the aggregate spread
+  validated against the individual model. That is a soak-and-compare piece of
+  work, not an optimisation.
+
   **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
   distinguishes a childless couple from an empty nest; a fourth (literacy or the
   age bands) would pin it. Hazard rates are absolute rather than per-capita and
