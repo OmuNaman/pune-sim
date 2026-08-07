@@ -52,6 +52,17 @@ _HOME_BUILDINGS = {"yes", "house", "residential", "apartments", "detached", "ter
 # it only when a run needs more households than the cap — see `load_for`.
 DEFAULT_MAX_HOMES = 400
 
+# Named blocks, built by scripts/fetch_osm_block.py. `kasba` is the V0-V2 pin:
+# every determinism hash and every soak in docs/soaks/ is a function of it, so
+# it stays the default forever. `oldcity` is V3's block — the same core widened
+# to four peths (438 named places, 7,008 buildings; households stack into them
+# because a wada is a compound, not a family).
+BLOCKS = {
+    "kasba": "data/anchors/kasba_places.geojson",
+    "oldcity": "data/anchors/oldcity_places.geojson",
+}
+DEFAULT_BLOCK = "kasba"
+
 
 @dataclass(frozen=True)
 class Place:
@@ -101,7 +112,8 @@ def _classify(props: dict) -> str | None:
 class Block:
     """Immutable V0 world model: named places + home candidates."""
 
-    def __init__(self, places: list[Place], homes: list[Place]):
+    def __init__(self, places: list[Place], homes: list[Place], name: str = "kasba"):
+        self.name = name
         self.places = places
         self.homes = homes
         self._by_id = {p.id: p for p in [*places, *homes]}
@@ -149,6 +161,7 @@ class Block:
         places_path: str | Path = "data/anchors/kasba_places.geojson",
         *,
         max_homes: int = DEFAULT_MAX_HOMES,
+        name: str = DEFAULT_BLOCK,
     ) -> "Block":
         data = orjson.loads(Path(places_path).read_bytes())
         places: list[Place] = []
@@ -161,30 +174,18 @@ class Block:
             lat, lon = ll
             fid = str(feat.get("id") or props.get("id") or f"{lat:.6f},{lon:.6f}")
             kind = _classify(props)
-            name = props.get("name")
-            if kind and name:
-                places.append(Place(id=f"place:{fid}", name=name, kind=kind, lat=lat, lon=lon))
+            label = props.get("name")
+            if kind and label:
+                places.append(Place(id=f"place:{fid}", name=label, kind=kind, lat=lat, lon=lon))
             elif (
                 kind is None
-                and not name
+                and not label
                 and props.get("building") in _HOME_BUILDINGS
             ):
                 homes.append(Place(id=f"home:{fid}", name="", kind="home", lat=lat, lon=lon))
         places.sort(key=lambda p: p.id)
         homes.sort(key=lambda p: p.id)
-        return cls(places, homes[:max_homes])
-
-
-# Named blocks, built by scripts/fetch_osm_block.py. `kasba` is the V0-V2 pin:
-# every determinism hash and every soak in docs/soaks/ is a function of it, so
-# it stays the default forever. `oldcity` is V3's block — the same core widened
-# to four peths (438 named places, 7,008 buildings against the ~10k households
-# the 2011 ward census counts there, which is what a wada is).
-BLOCKS = {
-    "kasba": "data/anchors/kasba_places.geojson",
-    "oldcity": "data/anchors/oldcity_places.geojson",
-}
-DEFAULT_BLOCK = "kasba"
+        return cls(places, homes[:max_homes], name=name)
 
 
 def load_for(n_households: int, block: str = DEFAULT_BLOCK, **kw) -> Block:
@@ -197,4 +198,5 @@ def load_for(n_households: int, block: str = DEFAULT_BLOCK, **kw) -> Block:
     """
     if block not in BLOCKS:
         raise ValueError(f"unknown block {block!r}; known: {', '.join(sorted(BLOCKS))}")
-    return Block.load(BLOCKS[block], max_homes=max(DEFAULT_MAX_HOMES, n_households), **kw)
+    return Block.load(BLOCKS[block], max_homes=max(DEFAULT_MAX_HOMES, n_households),
+                      name=block, **kw)

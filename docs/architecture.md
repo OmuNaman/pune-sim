@@ -284,8 +284,8 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   **Step 1 (the V3 block, done)** — `oldcity`, a four-peth extract, opt-in via
   `--block` so the Kasba pin and every soak hash stay frozen. 12k households /
   46.7k people run at 74 s/sim-day, n^1.12.
-  **Open, for step 2 (IPF):** synthesised household size is 3.89 against the
-  2011 ward census's 4.48 for these wards — the hand-written
+  **Open, for step 2 (IPF):** synthesised household size was 3.89 against the
+  2011 ward census's 4.14 for the Kasbavishrambaug ward office — the hand-written
   `HOUSEHOLD_TEMPLATES` mix is close but not fitted, and fitting it to ward
   marginals (households, population, sex, 0–6, SC/ST, literacy — all present in
   `pune_ward_census_2011.csv`) is exactly what the IPF step is for.

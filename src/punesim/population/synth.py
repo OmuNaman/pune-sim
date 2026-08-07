@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from ..kernel.rng import keyed_rng
 from ..world.block import Block
 from . import names
+from .demography import Demography, for_block
 
 # Old-city core estimate (C-1 town-level x peth priors; provenance=estimate).
 RELIGION_SHARES = [
@@ -21,14 +22,6 @@ RELIGION_SHARES = [
     ("buddhist_navayana", 0.05),
     ("jain", 0.03),
     ("christian", 0.01),
-]
-
-HOUSEHOLD_TEMPLATES = [
-    ("nuclear_kids", 0.40),
-    ("joint", 0.25),
-    ("pg_students", 0.15),
-    ("nuclear_nokids", 0.12),
-    ("elder_single", 0.08),
 ]
 
 # occupation -> place kinds searched for a workplace (None = works from home / roams)
@@ -128,8 +121,13 @@ def _given(rng, religion: str, sex: str) -> str:
 
 
 def synthesize(
-    run_seed: int, block: Block, n_households: int = 80
+    run_seed: int, block: Block, n_households: int = 80,
+    demo: Demography | None = None,
 ) -> tuple[list[Household], dict[str, Person]]:
+    # A block that claims to be a real place draws from that place's census.
+    # Passed explicitly only by the offline fitter; everything else takes the
+    # table its block is named after.
+    d = demo if demo is not None else for_block(getattr(block, "name", "kasba"))
     households: list[Household] = []
     people: dict[str, Person] = {}
     if not block.homes:
@@ -146,7 +144,7 @@ def synthesize(
     for i in range(n_households):
         hid = f"hh:{i:03d}"
         rng = keyed_rng(run_seed, "synth", hid, 0, "household")
-        template = _weighted(rng, HOUSEHOLD_TEMPLATES)
+        template = _weighted(rng, list(d.templates))
         religion = quota[rperm[i]]
         surname = _pick(rng, names.SURNAME[religion])
         # Pune's old city is wada housing: one mapped OSM building is a compound
@@ -159,31 +157,41 @@ def synthesize(
 
         members: list[tuple[str, int, str | None]] = []  # (sex, age, surname_override)
         if template == "nuclear_kids":
-            dad_age = int(rng.integers(30, 46))
-            members = [("m", dad_age, None), ("f", dad_age - int(rng.integers(2, 7)), None)]
-            for _ in range(int(rng.integers(1, 4))):
-                members.append(("m" if rng.random() < 0.52 else "f", int(rng.integers(3, 17)), None))
+            dad_age = int(rng.integers(*d.nuclear_parent_age))
+            members = [("m", dad_age, None),
+                       ("f", dad_age - int(rng.integers(*d.nuclear_spouse_gap)), None)]
+            for _ in range(int(rng.integers(*d.nuclear_kids))):
+                members.append(("m" if rng.random() < d.p_male_child else "f",
+                                int(rng.integers(*d.nuclear_kid_age)), None))
         elif template == "joint":
-            gdad = int(rng.integers(62, 78))
-            dad = gdad - int(rng.integers(26, 34))
+            gdad = int(rng.integers(*d.joint_grandparent_age))
+            dad = gdad - int(rng.integers(*d.joint_generation_gap))
+            gran = ("f", gdad - int(rng.integers(*d.joint_grandparent_gap)), None)
+            elders = [("m", gdad, None), gran]
+            # Often the grandfather is simply not there any more. Guarded so a
+            # table with p=0 draws nothing and keeps its sequence untouched.
+            if d.p_grandparent_widowed and rng.random() < d.p_grandparent_widowed:
+                elders = [gran]
             members = [
-                ("m", gdad, None),
-                ("f", gdad - int(rng.integers(2, 6)), None),
+                *elders,
                 ("m", dad, None),
-                ("f", dad - int(rng.integers(2, 7)), None),
+                ("f", dad - int(rng.integers(*d.joint_spouse_gap)), None),
             ]
-            for _ in range(int(rng.integers(1, 3))):
-                members.append(("m" if rng.random() < 0.52 else "f", int(rng.integers(4, 16)), None))
+            for _ in range(int(rng.integers(*d.joint_kids))):
+                members.append(("m" if rng.random() < d.p_male_child else "f",
+                                int(rng.integers(*d.joint_kid_age)), None))
         elif template == "nuclear_nokids":
-            a = int(rng.integers(25, 39))
-            members = [("m", a, None), ("f", a - int(rng.integers(1, 6)), None)]
+            a = int(rng.integers(*d.couple_age))
+            members = [("m", a, None), ("f", a - int(rng.integers(*d.couple_gap)), None)]
         elif template == "elder_single":
-            members = [("m" if rng.random() < 0.4 else "f", int(rng.integers(65, 86)), None)]
+            members = [("m" if rng.random() < d.p_male_elder else "f",
+                        int(rng.integers(*d.elder_age)), None)]
         else:  # pg_students — separate families sharing a room
-            for _ in range(int(rng.integers(3, 6))):
+            for _ in range(int(rng.integers(*d.pg_size))):
                 r2 = _weighted(rng, RELIGION_SHARES)
                 members.append(
-                    ("m" if rng.random() < 0.6 else "f", int(rng.integers(18, 25)), r2)
+                    ("m" if rng.random() < d.p_male_pg else "f",
+                     int(rng.integers(*d.pg_age)), r2)
                 )
 
         member_ids: list[str] = []

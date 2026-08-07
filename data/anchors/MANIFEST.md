@@ -40,7 +40,7 @@ oldcity`, which reproduces the Kasba files byte-for-byte from the same pin.
 |---|---|---|---|---|---|
 | `osm_oldcity_raw.json` | POST https://overpass-api.de/api/interpreter (bbox 18.505,73.845,18.532,73.870; query in `scripts/fetch_osm_block.py`) | 2026-08-07 | 5,982,462 B | `A229F83294B1D8D9` | Raw Overpass response for the four-peth core (Kasba + Shaniwar + Budhwar + Raviwar), ~7.9 km² against Kasba's 1.7 km² |
 | `oldcity_roads.geojson` | derived from `osm_oldcity_raw.json` by `scripts/fetch_osm_block.py` | 2026-08-07 | 1,275,324 B | `3DB5E614F24A7571` | 2,057 LineString features (499 in the Kasba pin) |
-| `oldcity_places.geojson` | derived from `osm_oldcity_raw.json` by `scripts/fetch_osm_block.py` | 2026-08-07 | 5,377,890 B | `21F867F6BD759281` | 7,859 features. Yields 438 named places and 7,008 home candidates. The 2011 ward census counts ~10k households across the three old-city wards this covers, so households stack ~1.7 to a building — which is what a wada is, not a shortfall in the extract |
+| `oldcity_places.geojson` | derived from `osm_oldcity_raw.json` by `scripts/fetch_osm_block.py` | 2026-08-07 | 5,377,890 B | `21F867F6BD759281` | 7,859 features. Yields 438 named places and 7,008 home candidates. The census's old-city unit is the Kasbavishrambaug ward office (13 wards, 43,138 households, 178,484 people), which is *larger* than this extract — absolute totals do not tile onto the block, so only ratio marginals transfer. At V3's 12k households that is ~1.7 households per building, which is what a wada is, not a shortfall in the extract |
 
 Still deferred to V3 (do not download yet): Google Open Buildings tiles,
 FABDEM DEM, District Census Handbook ward maps (manual georeference of the 4

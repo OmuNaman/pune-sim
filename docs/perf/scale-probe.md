@@ -121,9 +121,10 @@ Segment slopes: time n^0.84 → n^1.32, co-presence n^1.11 → n^1.13.
 
 **V3's exit population runs at 73 seconds per sim-day with zero LLM calls** — a
 30-day clockwork soak in 37 minutes, against the twelve-minutes-per-sim-day the
-pre-fix engine was heading for. Population synthesises to 46,671 people against
-a 2011 ward census that counts 45,811 across the three old-city wards this block
-covers.
+pre-fix engine was heading for. Population synthesises to 46,671 people; the census's
+old-city ward office holds 178,484 across 13 wards, of which this four-peth
+block is a part, so the block is a subset rather than a match — see
+`population/demography.py` for the ratio marginals it *is* held to.
 
 Note the two ladders disagree about the exponent — kasba still reads n^1.86 at
 its top rung while oldcity reads n^1.32. That gap *is* the worst-case caveat
