@@ -285,6 +285,14 @@ class InfoState:
     # the city. At 306 people it died in eight, which is why no earlier soak saw
     # it: the bug is invisible until the population outruns saturation.
     born: dict[str, int] = field(default_factory=dict)  # claim_key -> day
+    # Per person, the claims they could still pass on today. Measured on a
+    # 14-day run at 1,500 households: of every holding _try_share stopped to
+    # examine, 93.9% were already stifled, below the credence floor, or out of
+    # the day's shares — re-checked on every one of a million contacts. The set
+    # holds only the three state-based conditions; "have they heard it yet at
+    # this hour" stays in the loop, because it depends on the time of the
+    # contact rather than on the holding.
+    shareable: dict[str, set[str]] = field(default_factory=dict)
 
     def hear(
         self, person_id: str, claim: Claim, credence: float, day: int, seq: int,
@@ -296,11 +304,12 @@ class InfoState:
             self.born[claim.key] = day
         h = by_key.get(claim.key)
         if h is None:
-            by_key[claim.key] = Holding(
+            fresh_h = by_key[claim.key] = Holding(
                 claim=claim, credence=credence, exposures=1, first_day=day,
                 last_seq=seq, heard_abs=t_abs, last_source=source,
                 witnessed=channel == "witness", lineage=lineage[-LINEAGE_MAX:],
             )
+            self.mark_shareable(person_id, claim.key, fresh_h)
             return
         # What you saw with your own eyes is not overwritten by what you are
         # told about it (03-cognition §6.4: a percept outranks a report). The
@@ -319,11 +328,34 @@ class InfoState:
         h.exposures, h.last_source = h.exposures + 1, source
         if channel == "witness":
             h.witnessed = True
+        self.mark_shareable(person_id, claim.key, h)
+
+    def _can_share(self, h: "Holding") -> bool:
+        return (not h.stifled and h.credence >= MIN_CREDENCE_TO_SHARE
+                and h.shares_today < MAX_SHARES_PER_DAY)
+
+    def mark_shareable(self, person_id: str, key: str, h: "Holding") -> None:
+        """Add or drop one claim from a person's shareable set."""
+        got = self.shareable.get(person_id)
+        if self._can_share(h):
+            if got is None:
+                got = self.shareable[person_id] = set()
+            got.add(key)
+        elif got is not None:
+            got.discard(key)
 
     def reset_day(self) -> None:
-        for by_key in self.holdings.values():
-            for h in by_key.values():
+        """New day: everyone's share allowance refills, so the index is rebuilt
+        rather than patched — credence may have moved overnight too."""
+        self.shareable.clear()
+        for pid, by_key in self.holdings.items():
+            live = set()
+            for k, h in by_key.items():
                 h.shares_today = 0
+                if self._can_share(h):
+                    live.add(k)
+            if live:
+                self.shareable[pid] = live
 
 
 @dataclass(frozen=True)
@@ -447,8 +479,13 @@ def _try_share(
     holdings = state.holdings.get(sharer, {})
     if not holdings:
         return out
-    for key in sorted(holdings):
-        h = holdings[key]
+    live = state.shareable.get(sharer)
+    if not live:
+        return out
+    for key in sorted(live):
+        h = holdings.get(key)
+        if h is None:
+            continue
         if t < h.heard_abs:  # can't retell what you haven't heard yet
             continue
         if h.stifled or h.credence < MIN_CREDENCE_TO_SHARE or h.shares_today >= MAX_SHARES_PER_DAY:
@@ -461,6 +498,7 @@ def _try_share(
             # simulation, and the reason keyed_uniform exists.
             if keyed_uniform(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "stifle") < STIFLE_P:
                 h.stifled = True
+                state.mark_shareable(sharer, key, h)
                 continue
             if rh.exposures >= SATURATION_EXPOSURES:
                 continue
@@ -479,6 +517,7 @@ def _try_share(
         if keyed_uniform(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "share") >= p:
             continue
         h.shares_today += 1
+        state.mark_shareable(sharer, key, h)
         variant = maybe_mutate(h.claim, run_seed, sharer, day, block)
         prior = rh.credence if rh is not None else PRIOR_CREDENCE
         exposures = rh.exposures if rh is not None else 0
