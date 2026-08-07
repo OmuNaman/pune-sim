@@ -565,6 +565,36 @@ class Audit:
                  f"{len(quiet)} days rendered no morning scene at all",
                  [f"days: {quiet[:20]}"] if quiet else [])
 
+    def probe_belief_actions(self) -> None:
+        """Who changed their behaviour, and over what.
+
+        Two 30-day soaks each had 255 of 306 people avoiding a place because
+        the power had been off there — the largest behavioural event in either
+        run, and nobody was watching. A belief that moves most of a block is
+        either a genuine emergency or a modelling error, and it should have to
+        say which."""
+        actions = self.by_type["belief.action"]
+        if not actions:
+            self.add("BELIEF-ACTION-SCALE", "SKIP", "nobody acted on a rumour in this run")
+            return
+        by_claim: dict[str, Counter] = defaultdict(Counter)
+        for e in actions:
+            by_claim[e.payload.get("claim_key", "?")][e.payload.get("action", "?")] += 1
+        rows, loud = [], []
+        for key, acts in sorted(by_claim.items(), key=lambda kv: -sum(kv[1].values())):
+            n = sum(acts.values())
+            share = n / max(1, len(self.people))
+            rows.append(f"{key[:52]:52s} {n:4d} people ({share:.0%}) {dict(acts)}")
+            if share > 0.25:
+                loud.append(f"{key}: {n} of {len(self.people)} people ({share:.0%}) {dict(acts)}")
+        self.add(
+            "BELIEF-ACTION-SCALE",
+            "WARN" if loud else "PASS",
+            f"{len(actions)} behaviour changes over {len(by_claim)} claims; "
+            f"{len(loud)} claim(s) moved more than a quarter of the block",
+            loud + rows,
+        )
+
     def probe_memory_time(self) -> None:
         """A memory is read for weeks; a relative time word in one is true for a
         day and wrong forever after. absolutize() rewrites the ones it knows —
@@ -702,6 +732,7 @@ class Audit:
         self.probe_hazards()
         self.probe_info()
         self.probe_scenes()
+        self.probe_belief_actions()
         self.probe_memory_time()
         self.probe_talk()
         self.probe_cost()

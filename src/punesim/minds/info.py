@@ -456,10 +456,16 @@ def propagate_day(
 
 # --- action thresholds: belief -> behavior (E5 lane) ------------------------
 
-# only claims asserting a STANDING state drive mechanical avoidance — a past
-# one-off (collision, fire) prompts talk and scenes, not tomorrow's rerouting
+# Only claims asserting a STANDING state drive mechanical avoidance — a past
+# one-off (collision, fire) prompts talk and scenes, not tomorrow's rerouting.
+#
+# "outage" is deliberately NOT here. A power cut is a nuisance, not a reason to
+# change where you go, and leaving it in made 255 of 306 people avoid a place
+# because the lights had been off there — the largest single behavioural event
+# in two 30-day soaks, and nonsense. The block's honest response to a load-shed
+# is the complaint the institution lane already files.
 ONGOING_PREDICATES = {
-    "contaminated", "supply_cut", "outage", "dangerous", "adulterated", "misappropriated",
+    "contaminated", "supply_cut", "dangerous", "adulterated", "misappropriated",
 }
 
 
