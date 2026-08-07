@@ -119,6 +119,11 @@ point.
 
 Segment slopes: time n^0.70 → n^1.26, co-presence n^1.25 → n^1.13.
 
+*Measured at commit `cb863e9`, before the rumour-freshness fix that came out of
+the 30-day soak. That fix shortens claim lifetimes, so it makes the info lane
+cheaper, not dearer: the 30-day soak on current code sustained 76 s/sim-day at
+this size against the 86 below. These rows are the conservative ones.*
+
 **V3's exit population runs at 86 seconds per sim-day with zero LLM calls** — a
 30-day clockwork soak in 43 minutes, against the twelve-minutes-per-sim-day the
 pre-fix engine was heading for.

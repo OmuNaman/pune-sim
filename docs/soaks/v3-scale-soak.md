@@ -102,6 +102,10 @@ Audited in four windows across the 30 days: **0 FAIL**. Run the same script
 against the pre-fix log and days 22–29 still fail, which is the only evidence
 that the gate cuts at all.
 
+That control log lived in `runs/`, which is gitignored, so it is gone. The
+numbers it produced are the table above; to rebuild it, check out `e81af21` —
+the commit before the freshness fix — and re-run the same 30 days.
+
 The one standing WARN is `INFO-WITNESS-HEARSAY` — hearsay reaching someone who
 saw the thing themselves. Its own comment says it counts opportunities rather
 than corruption, because stickiness lives in `InfoState` and not in the log, so
