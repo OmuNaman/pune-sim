@@ -326,6 +326,13 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   "police")` are world queries, and a JSON expression language for them would
   be a worse Python.
 
+  **Step 5 (ClassDef registry, done)** — `data/classdefs/hazards.json` +
+  `world/classdefs.py`, validating loader, order still load-bearing. The
+  `narratability` field of 08-identity §5 is now machinery rather than a
+  ruling: `numeric` events are committed and countable, seed no claim, and
+  no scene opens on them at any attention level. Nothing shipped is numeric
+  yet — the rule exists before the NCRB classes that will need it.
+
   **Cost exit met** — 12,000 households with scenes on: **$0.0031/sim-day**
   against the $2 bar, versus $0.0029 at 80 households in V1. The gate caps
   scenes, so spend tracks attention rather than population; 14 of 12,000
