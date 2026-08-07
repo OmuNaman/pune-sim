@@ -125,6 +125,9 @@ account 120 times and the hearsay version zero times**. The V1.1 rule holds at
   works, the percepts land, the rumours spread — but the rate currently says
   nothing about Pune. Per-capita NCRB calibration is its own step, and it wants
   doing before anyone reads a casualty count as a finding.
-- The viewer still loads a whole log (`viewer/server.py:161`) and so cannot open
-  this run at all — the same defect the audit just had fixed, in the place where
-  it matters more, because following a person *is* the product.
+- ~~The viewer cannot open this run at all.~~ Fixed the same day: it read the
+  whole log and precomputed every person's movement for the whole run, which is
+  ~7.6 GB here. Movement is now built one day at a time and everything else is
+  read on demand; `punesim serve --db runs/v3soak/events.db --households 12000
+  --block oldcity` opens in 7.6s at 90 MB, and scrubbing within a cached day
+  costs 0.09s.
