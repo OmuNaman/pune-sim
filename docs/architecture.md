@@ -317,6 +317,15 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   could have. See [soaks/v3-scale-soak.md](soaks/v3-scale-soak.md). The viewer
   was rebuilt to read logs at that size rather than hold them.
 
+  **Step 4 (Procedure interpreter, done)** — `institutions/interpreter.py` (97
+  lines) plus `catalog.py`. The two V2 procedures are ported byte-identically
+  (hash `0625050f…` on a run exercising admission → discharge → bill → payment
+  and FIR → update). The closed effect vocabulary is real: a procedure may
+  schedule events and mark someone in hospital or resting, nothing else. The
+  binder stays Python deliberately — `min(adults)` and `block.nearest(place,
+  "police")` are world queries, and a JSON expression language for them would
+  be a worse Python.
+
   **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
   distinguishes a childless couple from an empty nest; a fourth (literacy or the
   age bands) would pin it. Hazard rates are absolute rather than per-capita and
