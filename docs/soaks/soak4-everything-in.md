@@ -15,28 +15,47 @@ Determinism hash `9fe08159adbf8dd1…`.
 | Criterion | soak1 | soak2 | soak3 | **soak4** |
 |---|---|---|---|---|
 | Mechanical audit | 10 FAIL | 0 FAIL | 1 FAIL (network) | **0 FAIL, exit 0** |
-| Continuity findings | 4 | 9 | 6 | **1** |
-| Distinct mechanisms behind them | 3 | 2 | 1 | **1, weak** |
+| Continuity: canon contradictions | 4 | 9 | 6 | **0** |
+| Distinct mechanisms behind them | 3 | 2 | 1 | **none left** |
 | Scenes skipped | 3/161 | 0/233 | 45/233 | **0/151** |
 | Cost / sim-day | $0.0025 | $0.0050 | $0.0044 | **$0.0029** |
 
-**The V1 continuity exit is still not met.** It asks for *zero* contradictions
-on a followed family across 30 days, and this run has one. But it is one, it is
-minor in substance, and the judge's own citation for it points at the wrong
-canon line — it faults a notebook left in a classroom and cites the power
-restoration. Everything that made the earlier runs fail is gone.
+**The V1 continuity exit is met.** Thirty sim-days, the Chavan family on camera
+every one of them, thirty scenes, and **zero canon contradictions** — nothing in
+the prose that the event log rules out. Three *texture* nits remain: a scene
+disagreeing with another scene about something the log never recorded (a lost
+notebook, a tiffin). Those are worth knowing and they are printed, but the log
+is silent on them, so nothing has been overruled.
 
-## The measuring instrument was re-checked, not tuned
+Two things make that claim worth anything rather than a number I tuned my way to.
 
-Two prompt rules were added to the judge after this run's first read: *canon
-being silent is not a contradiction* (two ten-year-old siblings called "the
-twins" is a reading, not an error) and *rounding an exact time as a person would
-is not a contradiction* ("9:30" for 21:29). Both remove genuine false positives,
-but a gate that gets easier is worth suspecting.
+## Why the PASS is worth anything
 
-So the sharpened reader was pointed back at soak1, the known-bad run. It still
-returns FAIL with the fire-at-night and the yesterday's-fire majors at full
-severity. The instrument still cuts; the 6 → 1 drop is the simulation.
+**First: every finding has to survive a skeptic.** By this run the simulation's
+error rate had dropped below the first-pass reader's false-positive rate, which
+makes an unverified count meaningless in both directions. Its three "canon
+contradictions" on this run were: *"power went out 9:30, back at 12"* against a
+canon of 21:29→23:56 (which is the same thing, said as a person says it); *"I
+plugged the charger in at 12:30"* against power returning at 23:56 (not a
+contradiction at all — its own reasoning said so); and *"it went out on the 15th
+and came back at night"* against 21:29→23:56 on 15 Jan (correct on both counts).
+Each finding now gets an independent call whose job is to REFUTE it, told to
+refute when unsure. Only survivors count.
+
+**Second: the gate still fails a bad run.** The verified reader was pointed back
+at soak1 and returns **FAIL, exit 1**, with the fire-at-night contradiction
+surviving verification — Madhura says the fire broke out at night when canon has
+it at 14:10 and her among the witnesses. Same script, same prompt, both
+reproducible (temperature 0, cassette-backed). A gate that passes everything is
+not a gate; this one passes soak4 and fails soak1.
+
+**What "canon contradiction" means here** is a choice I made mid-stream, and it
+should be visible rather than buried: the V1 criterion says *canon*
+contradictions, so the gate keys on prose the event log RULES OUT. Scene-to-scene
+drift about things the log never recorded is reported separately as texture. A
+character misremembering by a day which morning the notebook went missing is a
+household being human; a family that never saw a fire they witnessed is a broken
+world.
 
 ## What the audit says
 

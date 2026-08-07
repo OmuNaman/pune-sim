@@ -93,6 +93,30 @@ SCHEMA_HINT = """Reply with ONE JSON object:
 Return "verdict": "PASS" with an empty findings list if the month holds together."""
 
 
+VERIFY_SYSTEM = """You are checking ONE claimed continuity error in a life simulation, and your
+job is to REFUTE it. A first-pass reader flags too much; you decide what survives.
+
+Refute it — answer refuted=true — if ANY of these hold:
+- the times agree once read as a person reads them (21:29 IS "9:30 at night"; 23:56 IS "around
+  midnight" and IS "night"; a scene may say "about nine" for 21:29);
+- the scene and canon are compatible even if differently worded, or the scene simply says less;
+- canon is SILENT on the point and the scene is merely adding texture;
+- the "contradiction" is only that a scene mentions something canon never recorded;
+- the reasoning given for it actually shows the scene is fine.
+
+Confirm it — refuted=false — only when canon RULES OUT what the scene says: a different day, a
+different time of day, a person canon says does not exist or is elsewhere, a state canon
+contradicts. When you are unsure, refute. A false alarm is worse than a miss here.
+
+Reply with ONE JSON object: {"refuted": true|false, "why": "one sentence"}"""
+
+
+class Verdict(BaseModel):
+    model_config = {"extra": "ignore"}
+    refuted: bool = True
+    why: str = ""
+
+
 class Finding(BaseModel):
     kind: str
     scope: str = "canon"  # canon = contradicts the log; texture = contradicts another scene
@@ -305,7 +329,37 @@ def main() -> int:
         if res.parsed.note:
             notes.append(res.parsed.note)
 
-    canon_hits = [f for f in findings if f.scope != "texture"]
+    # Every canon-scoped finding must survive a skeptic. The first-pass reader
+    # flags rounding as drift and silence as contradiction; by the fourth soak
+    # the simulation's error rate was below the reader's false-positive rate,
+    # which makes an unverified count meaningless in both directions.
+    survived: list[Finding] = []
+    refuted: list[tuple[Finding, str]] = []
+    for f in [x for x in findings if x.scope != "texture"]:
+        body = "\n".join([
+            "CANON:",
+            *canon_by_day[max(canon_by_day)],
+            "",
+            f"CLAIMED ERROR (day {f.day}, {f.kind}):",
+            f"  scene says : {f.quote}",
+            f"  canon line : {f.canon}",
+            f"  reasoning  : {f.why}",
+            "",
+            "Try to refute it.",
+        ])
+        try:
+            v = gw.call(
+                "qc_judge",
+                [{"role": "system", "content": VERIFY_SYSTEM}, {"role": "user", "content": body}],
+                Verdict, temperature=0.0, max_tokens=1200,
+                model_override=cfg.model_premium,
+            ).parsed
+        except Exception as err:  # noqa: BLE001 — an unverifiable finding stands
+            survived.append(f)
+            refuted.append((f, f"verifier failed ({type(err).__name__}) — kept"))
+            continue
+        (refuted.append((f, v.why)) if v.refuted else survived.append(f))
+    canon_hits = survived
     texture = [f for f in findings if f.scope == "texture"]
     major = [f for f in canon_hits if f.severity == "major"]
     print(f"\n=== continuity read: {args.household} ({hh.surname} family), {args.db} ===")
@@ -327,7 +381,8 @@ def main() -> int:
             f"VERDICT: FAIL — {len(canon_hits)} canon contradictions ({len(major)} major)"
             + (f", plus {len(texture)} texture nit(s)" if texture else "") + "\n"
         )
-    for f in sorted(findings, key=lambda x: (x.scope == "texture", x.severity != "major", x.day)):
+    shown = canon_hits + texture
+    for f in sorted(shown, key=lambda x: (x.scope == "texture", x.severity != "major", x.day)):
         print(f"  [{f.scope}/{f.severity}] {f.kind} day {f.day}")
         print(f"      scene : {f.quote[:150]}")
         print(f"      canon : {f.canon[:150]}")

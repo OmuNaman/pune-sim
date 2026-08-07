@@ -2,21 +2,29 @@
 === continuity read: hh:000 (Chavan family), runs\soak4\events.db ===
 30 scenes over days 0-29, judged by deepseek/deepseek-v4-pro in 5 batches
 
-VERDICT: FAIL — 1 contradictions (1 major)
+VERDICT: PASS — no canon contradictions.  (3 texture nit(s) below; the log is silent on those.)
 
-  [major] EVENT-TIME day 28
-      scene : Kalcha experience purta.
-      canon : Thu 15 Jan 2026, 23:56 — Aditya Chavan was present: 'The power is back around Nilkantheshwar'
-      why   : Aditya refers to Wednesday 28 Jan as 'yesterday's notebook mishap,' but the notebook was left in the classroom on Tuesday 27 Jan, not Wednesday 28 Jan
+  [texture/minor] STATE day 5
+      scene : Kalchya workbook bhetla.
+      canon : Scene day 4 memory: 'Vaishali confirmed her bag is ready without any lost workbook'
+      why   : Vaishali claims she found yesterday's workbook, implying it was lost on day 4, but day 4's scene shows she had no missing items.
+  [texture/minor] REPEAT day 26
+      scene : Aditya asked for less spicy pohe, repeating his preference from Sunday.
+      canon : Day 24 scene: Aditya says 'pohe jāst mirayā lāvū nako'
+      why   : The memory note claims Aditya repeated his Sunday preference, but on day 24 (Sunday) he asked for less spice in pohe; on day 26 he says 'Ajun mitha la
+  [texture/minor] REPEAT day 28
+      scene : Aditya, still stung by yesterday's notebook mishap, double-checks his bag
+      canon : Day 27 scene: Aditya forgot notebook on Tue 27 Jan and retrieved it that morning
+      why   : The scene says 'yesterday's notebook mishap' but day 27 was Wednesday 28 Jan and day 28 is Thursday 29 Jan; the mishap happened on day 27, so 'yesterd
 
-  note: The Chavan family's morning routines are consistent with the canon roster; minor daily variations in squabbles and items misplaced do not contradict any canonical facts, and the household's coherence holds across six days.
+  note: The Chavan family's daily life is largely consistent, but a small texture inconsistency about a lost workbook appears between day 4 and day 5, undermining the otherwise coherent week.
 
-  note: The Chavan family's morning routines and rumor discussions across days 6–11 are consistent with the canon roster and contain no contradictions of event time, identity, repetition, or state.
+  note: The Chavan family's conversations about external accidents and water tankers stay within the bounds of rumor and speculation, with no contradictions to the silent canon. All named outsiders are outside the household, and the roster remains intact.
 
-  note: The Chavan family's morning routines are consistent across the week, and their recollections of the Thursday night power outage (rounded to 9:30 PM and midnight) align reasonably with the canon's exact times.
+  note: The Chavan household's morning routines are coherent, but day 15's dialogue misstates the exact times of the power outage and restoration recorded in canon, introducing two event-time contradictions.
 
-  note: The Chavan family's morning routines across days 18–23 are consistent with the canon. No event times, identities, repeated incidents, or state contradictions were found; the scenes depict ordinary school-day preparations that align with the roster and the single power-outage event recorded on 15 Jan.
+  note: The Chavan household's morning routines are consistent with canon; the power outage from 15 Jan is correctly referenced as past, and no events, identities, or states are contradicted across the six scenes.
 
-  note: The family's routines and relationships are coherent, but a single date mismatch in Aditya's memory of the notebook incident breaks temporal continuity.
+  note: The Chavan family's daily routines and interactions remain largely coherent across the week. One minor canon contradiction exists in how the power outage timing is retold, and a couple of texture-level repetitions in food preferences and notebook incidents, but these do not break the simulation's core consistency.
 
 written: docs\soaks\soak4-continuity.json
