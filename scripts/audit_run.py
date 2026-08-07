@@ -47,6 +47,15 @@ RATES = {
 }
 DEFAULT_RATE = (0.5, 1.0)
 
+# A rumour dies when it stops finding people who have not heard it. Counting
+# hearings instead measures the wrong thing: every claim keeps being mentioned
+# as it fades, and at 49,578 people a handful of stragglers is noise. These
+# separate a 30-day soak whose "the power is back" recruited 254 first-time
+# hearers twelve days on (broken) from the same claim recruiting 17 (fixed).
+LATE_HEARER_DAYS = 12
+LATE_HEARER_FLOOR = 40    # below this it is a handful of people, at any scale
+LATE_HEARER_SHARE = 0.01  # ...and above it, still 1% of everyone it ever reached
+
 CLOCKWORK_ACTIVITIES = {"work", "driving_rounds", "school", "errand", "admitted"}
 ABSENCE_WORDS = re.compile(
     r"\b(home|rest|sick|stay|stays|shelter|hospital|admitted|bed|ill|unwell|indoors|ghar)\b", re.IGNORECASE
@@ -105,7 +114,7 @@ class Audit:
     def __init__(
         self, events: list[Event], people: dict, households: list, n_days: int,
         *, partial_last_day: bool = False, followed: set[str] | None = None,
-        windowed_tail: bool = False,
+        windowed_tail: bool = False, claim_reach: dict | None = None,
     ):
         self.events = events
         self.people = people
@@ -131,6 +140,7 @@ class Audit:
         # windowed audit of a 30-day soak reported exactly that as a FAIL, and
         # the window covering the actual end showed the claim dying on time.
         self.windowed_tail = windowed_tail
+        self.claim_reach = claim_reach or {}
         self.followed = set(followed or ())
 
     # -- helpers ---------------------------------------------------------- #
@@ -527,7 +537,6 @@ class Audit:
         by_claim: dict[str, list[Event]] = defaultdict(list)
         for e in heard:
             by_claim[e.payload.get("claim_key", "?")].append(e)
-        last_day = max(e.day for e in self.events)
         immortal, saturated, rows = [], [], []
         for key, evs in sorted(by_claim.items()):
             people_n = len({e.payload["person"] for e in evs})
@@ -540,8 +549,23 @@ class Audit:
             )
             # A claim born in the last few days has not had time to die; only
             # an OLD claim still spreading is evidence of a broken lifecycle.
-            if days[-1] > last_day - 3 and days[0] <= last_day - 6:
-                immortal.append(f"{key}: born d{days[0]}, still spreading on d{days[-1]} of {last_day}")
+            #
+            # "Still spreading" has to mean a *rate*, not the existence of one
+            # straggler. At 306 people any hearing at all on the last day was a
+            # fair signal; at 49,578 a dying claim's tail is 4 hearings a day
+            # against a peak of thousands, and calling that immortal would fail
+            # a run whose decay curve is textbook (64, 44, 22, 14, 10, 4, 7, 4).
+            # So: what fraction of its own peak is it still doing?
+            reach_info = self.claim_reach.get(key)
+            if reach_info and reach_info["reach"]:
+                late, reach, born = (reach_info["late_new"], reach_info["reach"],
+                                     reach_info["born"])
+                if late > max(LATE_HEARER_FLOOR, LATE_HEARER_SHARE * reach):
+                    immortal.append(
+                        f"{key}: born d{born}, and {late} people heard it for the FIRST time "
+                        f"{LATE_HEARER_DAYS}+ days later ({late / reach:.1%} of everyone it "
+                        "ever reached) — it is not dying, it is still recruiting"
+                    )
             if people_n > 0.9 * len(self.people):
                 saturated.append(f"{key}: reached {people_n}/{len(self.people)}")
         if self.windowed_tail and immortal:
@@ -550,7 +574,8 @@ class Audit:
                      "edge says nothing — re-run over the window that covers the last day")
             immortal = []
         self.add("RUMOR-IMMORTAL", "FAIL" if immortal else "PASS",
-                 f"{len(immortal)} claims still alive in the last 3 days (limit 0)", immortal + rows)
+                 f"{len(immortal)} claims still recruiting first-time hearers "
+                 f"{LATE_HEARER_DAYS}+ days on (limit 0)", immortal + rows)
         self.add("RUMOR-SATURATION", "FAIL" if saturated else "PASS",
                  f"{len(saturated)} claims past 90% of the block (limit 0)", saturated)
 
@@ -771,6 +796,44 @@ class TooBig(Exception):
 MAX_EVENTS_UNBOUNDED = 1_500_000
 
 
+def claim_reach(db: Path, branch: int) -> dict[str, dict]:
+    """claim_key -> {born, reach, late_new}, over the WHOLE run.
+
+    `late_new` is the number of people who heard a claim for the FIRST time
+    more than LATE_HEARER_DAYS after it was born. That is the exact shape of a
+    broken lifecycle: not "someone mentioned it again", which any dying claim
+    does, but "the story is still finding people who have never heard it", a
+    fortnight on. A windowed audit cannot compute it, and a 30-day log cannot be
+    held in memory, so it comes from one aggregate over info.heard - 161k rows
+    in a 6.8M-event run, because only hearings matter here.
+    """
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "SELECT json_extract(payload,'$.claim_key') k, json_extract(payload,'$.person') p,"
+            " MIN(sim_time)/? FROM event WHERE branch_id = ? AND type = 'info.heard'"
+            " GROUP BY k, p",
+            (SECONDS_PER_DAY, branch),
+        ).fetchall()
+    except sqlite3.OperationalError:  # no JSON1: the probe simply says less
+        return {}
+    finally:
+        con.close()
+    first: dict[str, list[int]] = defaultdict(list)
+    for key, _person, day in rows:
+        if key is not None:
+            first[key].append(int(day))
+    out = {}
+    for key, days in first.items():
+        born = min(days)
+        out[key] = {
+            "born": born,
+            "reach": len(days),
+            "late_new": sum(1 for d in days if d >= born + LATE_HEARER_DAYS),
+        }
+    return out
+
+
 def load(db: Path, branch: int, since_day: int | None = None,
          until_day: int | None = None) -> list[Event]:
     q = ("SELECT seq, sim_time, type, payload, caused_by, provenance "
@@ -901,6 +964,7 @@ def main() -> int:
     windowed_tail = bool(args.until_day is not None and planned_days
                          and args.until_day < planned_days - 1)
     audit = Audit(events, people, hhs, n_days, partial_last_day=args.live,
+                  claim_reach=claim_reach(args.db, args.branch),
                   windowed_tail=windowed_tail,
                   followed=followed)
     audit.run()
