@@ -655,7 +655,8 @@ def run_simulation(
     if start_day == 0:  # self-describing log: a db alone is enough to branch it
         log.commit([EventIn(
             type="run.meta", sim_time=0,
-            payload={"seed": run_seed, "households": len(households), "days": days},
+            payload={"seed": run_seed, "households": len(households), "days": days,
+                     "follow": list(follow)},
             provenance="system",
         )])
         total += 1

@@ -94,7 +94,7 @@ class Result:
 class Audit:
     def __init__(
         self, events: list[Event], people: dict, households: list, n_days: int,
-        *, partial_last_day: bool = False,
+        *, partial_last_day: bool = False, followed: set[str] | None = None,
     ):
         self.events = events
         self.people = people
@@ -114,6 +114,7 @@ class Audit:
         # consequence?" would fail on a consequence that is merely not yet due.
         self.last_day = max((e.day for e in events), default=0)
         self.partial_last_day = partial_last_day
+        self.followed = set(followed or ())
 
     # -- helpers ---------------------------------------------------------- #
 
@@ -187,30 +188,50 @@ class Audit:
 
     def probe_self_echo(self) -> None:
         """The soak's central defect: a scene shown its own previous output.
-        Detectable from the log alone — if a scene's memory/message text is
-        reproduced by that same household's later scene, the loop is back."""
-        by_hh: dict[str, list[tuple[int, str]]] = defaultdict(list)
+        Detectable from the log alone — if a PERSON's memory or message text is
+        reproduced by a LATER scene, the loop is back.
+
+        Keyed per person and across scenes on purpose. Grouping by household
+        instead reported one scene handing five witnesses of the same power cut
+        the same sentence — lazy, but not the echo this probe exists to catch.
+        """
+        per: dict[str, list[tuple[int, int, str]]] = defaultdict(list)  # person -> (scene, seq, text)
+        same_scene: list[str] = []
         for e in self.by_type["memory.formed"] + self.by_type["message.sent"]:
             pid = self.norm_id(e.payload.get("person") or e.payload.get("sender"))
-            hid = self.hh_of.get(pid)
-            if hid:
-                text = self._flat(e.payload.get("summary") or e.payload.get("text") or "")
-                if len(text) > 25:
-                    by_hh[hid].append((e.seq, text))
+            text = self._flat(e.payload.get("summary") or e.payload.get("text") or "")
+            if pid in self.people and len(text) > 25:
+                per[pid].append((e.caused_by or -e.seq, e.seq, text))
         repeats: list[str] = []
-        for hid, items in sorted(by_hh.items()):
-            first: dict[str, int] = {}
-            for seq, text in items:
-                if text in first:
-                    repeats.append(f"{hid} seq{first[text]}=={seq}: {text[:70]}")
-                else:
-                    first[text] = seq
+        for pid, items in sorted(per.items()):
+            first: dict[str, tuple[int, int]] = {}
+            for scene, seq, text in items:
+                prior = first.get(text)
+                if prior is None:
+                    first[text] = (scene, seq)
+                elif prior[0] != scene:
+                    repeats.append(f"{pid} seq{prior[1]}=={seq}: {text[:70]}")
+        # One scene, one sentence, several members — a different smell.
+        by_scene: dict[int, Counter] = defaultdict(Counter)
+        for pid, items in per.items():
+            for scene, _seq, text in items:
+                by_scene[scene][text] += 1
+        for scene, texts in sorted(by_scene.items()):
+            for text, n in texts.items():
+                if n >= 3:
+                    same_scene.append(f"scene {scene}: {n} people given \"{text[:60]}\"")
         self.add(
             "SELF-ECHO",
             "FAIL" if repeats else "PASS",
-            f"{len(repeats)} texts a household reproduced verbatim later (limit 0)",
+            f"{len(repeats)} texts a person's later scene reproduced verbatim (limit 0)",
             repeats,
         )
+        if same_scene:
+            self.add(
+                "SCENE-COPY-PASTE", "WARN",
+                f"{len(same_scene)} scenes gave 3+ members an identical memory",
+                same_scene,
+            )
 
     def probe_identity(self) -> None:
         dangling: list[str] = []
@@ -310,13 +331,17 @@ class Audit:
                 for hid in set(streak) | today:
                     streak[hid] = streak[hid] + 1 if hid in today else 0
                     best[hid] = max(best[hid], streak[hid])
-            worst = sorted(best.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+            free = {h: n for h, n in best.items() if h not in self.followed}
+            worst = sorted(free.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
             top = worst[0][1] if worst else 0
+            pinned = sorted(h for h in best if h in self.followed)
             self.add(
                 "SPOTLIGHT-STREAK",
                 "FAIL" if top > 10 else "PASS",
-                f"longest consecutive-day streak {top} (limit 10)",
-                [f"{h}: {n} days running" for h, n in worst if n > 5],
+                f"longest streak among UNFOLLOWED households {top} (limit 10)"
+                + (f"; {len(pinned)} pinned by --follow and exempt" if pinned else ""),
+                [f"{h}: {n} days running" for h, n in worst if n > 5]
+                + [f"(followed by design: {', '.join(pinned)})" if pinned else ""],
             )
         last10 = sorted(by_day)[-10:]
         distinct = len({h for d in last10 for h in by_day[d]})
@@ -676,6 +701,8 @@ def main() -> int:
     ap.add_argument("--households", type=int, default=80)
     ap.add_argument("--branch", type=int, default=0)
     ap.add_argument("--strict", action="store_true", help="promote WARN to FAIL")
+    ap.add_argument("--follow", action="append",
+                    help="household pinned on camera by the run (read from run.meta when present)")
     ap.add_argument("--live", action="store_true",
                     help="the run is still writing: skip the last, half-built day")
     ap.add_argument("--details", type=int, default=12, help="hits printed per failing probe")
@@ -694,6 +721,7 @@ def main() -> int:
         return 2
 
     seed, households = args.seed, args.households
+    followed: set[str] = set(args.follow or [])
     meta = [e for e in events if e.type == "run.meta"]
     corroborated = False
     if meta:
@@ -707,6 +735,9 @@ def main() -> int:
             )
             return 2
         corroborated = True
+        for ref in m.get("follow") or []:
+            followed.add(ref if ref.startswith("hh:") else "")
+        followed.discard("")
 
     try:
         block = Block.load()
@@ -716,7 +747,8 @@ def main() -> int:
         return 2
 
     n_days = max(e.day for e in events) - min(e.day for e in events) + 1
-    audit = Audit(events, people, hhs, n_days, partial_last_day=args.live)
+    audit = Audit(events, people, hhs, n_days, partial_last_day=args.live,
+                  followed=followed)
     audit.run()
 
     order = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3}
