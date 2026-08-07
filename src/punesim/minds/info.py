@@ -17,7 +17,7 @@ from bisect import bisect_left
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
-from ..kernel.rng import keyed_rng
+from ..kernel.rng import keyed_rng, keyed_uniform
 from ..kernel.timebase import SECONDS_PER_DAY
 from ..population.synth import Person
 from ..world.block import Block
@@ -457,8 +457,9 @@ def _try_share(
         if rh is not None:
             # Maki-Thompson: meeting someone who already knows may convert the
             # teller to a stifler — rumors die from saturation, not exhaustion
-            srng = keyed_rng(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "stifle")
-            if srng.random() < STIFLE_P:
+            # One coin flip per contact per held claim — the hottest draw in the
+            # simulation, and the reason keyed_uniform exists.
+            if keyed_uniform(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "stifle") < STIFLE_P:
                 h.stifled = True
                 continue
             if rh.exposures >= SATURATION_EXPOSURES:
@@ -475,8 +476,7 @@ def _try_share(
         tr = traits(run_seed, sharer)
         base = 0.9 if channel == "household" else P_SHARE_BASE * (0.4 + 0.6 * tr.sociability)
         p = base * (0.3 + 0.7 * h.claim.charge) * fresh * h.credence
-        rng = keyed_rng(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "share")
-        if rng.random() >= p:
+        if keyed_uniform(run_seed, "info", f"{sharer}|{receiver}|{key}", day, "share") >= p:
             continue
         h.shares_today += 1
         variant = maybe_mutate(h.claim, run_seed, sharer, day, block)
