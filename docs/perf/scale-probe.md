@@ -60,8 +60,8 @@ giveaway is not the runtime — it is this:
 
 How many people you exchange news with in a day was a function of how big the
 city is. A person in an 11k-person world was holding 225 information exchanges a
-day and the number was still climbing. With the cap it is flat at ~17–20 across
-a 150× population range — the same order as the 20.4 the 80-household soaks were
+day and the number was still climbing. With the cap it is flat at ~16–21 across
+a 160× population range — the same order as the 20.4 the 80-household soaks were
 validated against. Contact rate should be bounded by a day's attention, not by
 the size of the city you live in. A market with three thousand people through it
 is not a room.

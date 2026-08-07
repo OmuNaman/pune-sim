@@ -743,14 +743,47 @@ class Audit:
 # --------------------------------------------------------------------------- #
 
 
-def load(db: Path, branch: int) -> list[Event]:
+class TooBig(Exception):
+    """The requested window will not fit in memory; the message says what to do."""
+
+
+# Every probe holds the whole window in memory at once, at roughly 1.1 kB per
+# event with its payload parsed. That was free at 80 households; a 30-day run at
+# 12k commits 232k events a day, so the same call would try to build a 7.6 GB
+# list and die *after* the soak, which is the worst possible time to find out.
+# Above this, refuse and say how to window it rather than OOM.
+MAX_EVENTS_UNBOUNDED = 1_500_000
+
+
+def load(db: Path, branch: int, since_day: int | None = None,
+         until_day: int | None = None) -> list[Event]:
+    q = ("SELECT seq, sim_time, type, payload, caused_by, provenance "
+         "FROM event WHERE branch_id = ?")
+    args: list = [branch]
+    if since_day is not None:
+        q += " AND sim_time >= ?"
+        args.append(since_day * SECONDS_PER_DAY)
+    if until_day is not None:
+        q += " AND sim_time < ?"
+        args.append((until_day + 1) * SECONDS_PER_DAY)
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
-        rows = con.execute(
-            "SELECT seq, sim_time, type, payload, caused_by, provenance "
-            "FROM event WHERE branch_id = ? ORDER BY seq",
-            (branch,),
-        ).fetchall()
+        if since_day is None and until_day is None:
+            n = con.execute(
+                "SELECT COUNT(*) FROM event WHERE branch_id = ?", (branch,)
+            ).fetchone()[0]
+            if n > MAX_EVENTS_UNBOUNDED:
+                last = con.execute(
+                    "SELECT MAX(sim_time) FROM event WHERE branch_id = ?", (branch,)
+                ).fetchone()[0] or 0
+                days = last // SECONDS_PER_DAY
+                raise TooBig(
+                    f"{n:,} events across {days + 1} days would need about "
+                    f"{n * 1.1 / 1e6:.1f} GB to audit in one pass. Audit a window "
+                    f"instead, e.g. --since-day {max(0, days - 9)} --until-day {days}, "
+                    "and run more than one window if you need the whole run."
+                )
+        rows = con.execute(q + " ORDER BY seq", args).fetchall()
     finally:
         con.close()
     return [Event(r[0], r[1], r[2], orjson.loads(r[3]), r[4], r[5]) for r in rows]
@@ -773,6 +806,10 @@ def main() -> int:
                     help="household pinned on camera by the run (read from run.meta when present)")
     ap.add_argument("--live", action="store_true",
                     help="the run is still writing: skip the last, half-built day")
+    ap.add_argument("--since-day", type=int, default=None,
+                    help="audit only from this sim day (large runs cannot be held whole)")
+    ap.add_argument("--until-day", type=int, default=None,
+                    help="audit only up to and including this sim day")
     ap.add_argument("--details", type=int, default=12, help="hits printed per failing probe")
     args = ap.parse_args()
 
@@ -780,10 +817,18 @@ def main() -> int:
         print(f"audit: no such db: {args.db}", file=sys.stderr)
         return 2
     try:
-        events = load(args.db, args.branch)
+        events = load(args.db, args.branch, args.since_day, args.until_day)
+    except TooBig as err:
+        print(f"audit: {err}", file=sys.stderr)
+        return 2
     except sqlite3.Error as err:
         print(f"audit: cannot read {args.db}: {err}", file=sys.stderr)
         return 2
+    if args.since_day is not None or args.until_day is not None:
+        lo = args.since_day if args.since_day is not None else 0
+        hi = args.until_day if args.until_day is not None else "end"
+        print(f"audit: window is days {lo}..{hi} — probes that reason about a whole "
+              f"run (rumour lifetime, spotlight coverage) see only this slice")
     if not events:
         print(f"audit: {args.db} branch {args.branch} is empty", file=sys.stderr)
         return 2
