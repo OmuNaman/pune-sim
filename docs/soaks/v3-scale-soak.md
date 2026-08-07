@@ -118,13 +118,24 @@ account 120 times and the hearsay version zero times**. The V1.1 rule holds at
 
 - **Four hazards in 30 days** across 49,578 people. `hazards.CLASSES` gives each
   class an absolute daily probability — 0.10 for a road collision, 0.02 for a
-  fire — so the whole four-peth city draws ~0.25 hazards a day, exactly what an
-  80-household block drew. They are not per-capita and were tuned when the world
-  held 306 people; at 49,578 they are ~160× too low, and the old city plainly
-  sees more than one road accident a fortnight. Nothing is *broken* — the lane
-  works, the percepts land, the rumours spread — but the rate currently says
-  nothing about Pune. Per-capita NCRB calibration is its own step, and it wants
-  doing before anyone reads a casualty count as a finding.
+  fire — so the whole four-peth city draws ~0.25 hazards a day, which is exactly
+  what an 80-household block drew. The rate is not per-capita and does not move
+  with the world.
+
+  Worth stating carefully, because the obvious reading is the wrong one. Held
+  against population, that same constant means **298 hazards per 1,000 people
+  per year at 306 people, 1.84 at 49,578, and 0.03 at Pune's full 3.1M**. The V0
+  setting was not too low for a city; it was extravagantly high for a village,
+  tuned so that something would happen in a sim small enough to read by hand.
+  Growing the world quietly walked it down through plausible and will keep
+  going.
+
+  Whether 1.84 per 1,000 per year is right for the old city is a question this
+  repo cannot answer yet: the architecture names NCRB city tables as the source
+  and no NCRB data is vendored. So the rates are left alone rather than
+  rescaled — making them per-capita around an uncalibrated level would only
+  make a wrong number scale confidently. What is needed is the data, and then
+  both the shape and the level at once.
 - ~~The viewer cannot open this run at all.~~ Fixed the same day: it read the
   whole log and precomputed every person's movement for the whole run, which is
   ~7.6 GB here. Movement is now built one day at a time and everything else is
