@@ -305,12 +305,23 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   first). Bounding the knobs and adding the mechanism made the search find it.
   **A calibration that hits its targets is not thereby correct.**
 
-  **Open, for step 3:** `nuclear_nokids` sits at 0.04 because nothing in three
-  marginals distinguishes a childless couple from an empty nest; a fourth
-  (literacy or the age bands) would pin it. Then the trip engine on the road
-  graph — `oldcity_roads.geojson` is 2,057 ways and still unused, walking is
-  haversine × 1.4 — plus cohorts, which is what the residual linear constant in
-  the scale probe is waiting for.
+  **Step 3 (trip engine, done)** — `world/roads.py` builds a 7,978-node walking
+  graph from the pinned ways; shortest paths run from the 438 places rather than
+  the 7,008 homes, since walking is symmetric. Per block like demography: kasba
+  never routes. The flat 1.4 detour factor turns out generous on 88% of walks
+  (median 0.93×) and blind to the 11% that reach 2.4× — a constant is wrong in
+  one direction or the other. +18% per sim-day.
+
+  **First soak of the new world (done)** — 30 days, 49,578 people, 6.8M events,
+  0 FAIL across four audit windows; three defects found that nothing smaller
+  could have. See [soaks/v3-scale-soak.md](soaks/v3-scale-soak.md). The viewer
+  was rebuilt to read logs at that size rather than hold them.
+
+  **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
+  distinguishes a childless couple from an empty nest; a fourth (literacy or the
+  age bands) would pin it. Hazard rates are absolute rather than per-capita and
+  blocked on NCRB data nobody has vendored. Then cohorts, which is what the
+  residual linear constant in the scale probe is waiting for.
 - **V4+ — Arcs, courts, QC depth, scale-out.** 90-day soak, budget governor,
   evaluation harness, full collective dynamics (09), election-class process
   test — note the real Jan 2026 PMC election already happened (41 prabhags),
