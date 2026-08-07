@@ -42,6 +42,18 @@ a film. You are given (1) the CANON — a family's roster and every fact the sim
 records about them, which is ground truth and cannot be wrong — and (2) every SCENE written about
 them, in order.
 
+Two things can be wrong, and they are NOT the same:
+
+  scope="canon"   — the prose contradicts the EVENT LOG. A witnessed fire moved to nighttime, a
+                    person who does not exist, someone at work while canon has them in hospital.
+                    These are the ones that matter: the log is the world, and prose may not
+                    overrule it.
+  scope="texture" — the prose contradicts ANOTHER SCENE about something the log never recorded.
+                    A lost notebook, what was cooked, whose turn it was. Worth knowing — a
+                    household should not contradict itself — but the log is silent, so nothing
+                    has been overruled. A character misremembering a small domestic detail by a
+                    day is what people do.
+
 Find places where the prose contradicts the canon. The four kinds that matter:
   EVENT-TIME     — an event retold at a different time or day than canon records, including
                    time of day ("the fire broke out at night" when canon says 14:05).
@@ -71,6 +83,7 @@ this is a pass/fail gate on the simulation's core promise."""
 SCHEMA_HINT = """Reply with ONE JSON object:
 {"findings": [{"kind": "EVENT-TIME|IDENTITY|REPEAT|STATE",
                "severity": "major|minor",
+               "scope": "canon" or "texture",
                "day": <sim day of the offending scene>,
                "quote": "the exact phrase from the scene",
                "canon": "the canon line it contradicts",
@@ -82,6 +95,7 @@ Return "verdict": "PASS" with an empty findings list if the month holds together
 
 class Finding(BaseModel):
     kind: str
+    scope: str = "canon"  # canon = contradicts the log; texture = contradicts another scene
     severity: str = "minor"
     day: int = -1
     quote: str = ""
@@ -291,7 +305,9 @@ def main() -> int:
         if res.parsed.note:
             notes.append(res.parsed.note)
 
-    major = [f for f in findings if f.severity == "major"]
+    canon_hits = [f for f in findings if f.scope != "texture"]
+    texture = [f for f in findings if f.scope == "texture"]
+    major = [f for f in canon_hits if f.severity == "major"]
     print(f"\n=== continuity read: {args.household} ({hh.surname} family), {args.db} ===")
     print(f"{len(scenes)} scenes over days {scenes[0][0]}-{scenes[-1][0]}, "
           f"judged by {cfg.model_premium} in {len(verdicts)} batches\n")
@@ -300,16 +316,22 @@ def main() -> int:
         for u in unread:
             print(f"     {u}")
         print()
-    if not findings:
-        print("VERDICT: PASS — no contradictions found." if not unread
-              else "VERDICT: PARTIAL — no contradictions in the batches that were read.")
+    if not canon_hits:
+        head = ("VERDICT: PASS — no canon contradictions." if not unread
+                else "VERDICT: PARTIAL — no canon contradictions in the batches read.")
+        if texture:
+            head += f"  ({len(texture)} texture nit(s) below; the log is silent on those.)"
+        print(head + "\n")
     else:
-        print(f"VERDICT: FAIL — {len(findings)} contradictions ({len(major)} major)\n")
-        for f in sorted(findings, key=lambda x: (x.severity != "major", x.day)):
-            print(f"  [{f.severity}] {f.kind} day {f.day}")
-            print(f"      scene : {f.quote[:150]}")
-            print(f"      canon : {f.canon[:150]}")
-            print(f"      why   : {f.why[:150]}")
+        print(
+            f"VERDICT: FAIL — {len(canon_hits)} canon contradictions ({len(major)} major)"
+            + (f", plus {len(texture)} texture nit(s)" if texture else "") + "\n"
+        )
+    for f in sorted(findings, key=lambda x: (x.scope == "texture", x.severity != "major", x.day)):
+        print(f"  [{f.scope}/{f.severity}] {f.kind} day {f.day}")
+        print(f"      scene : {f.quote[:150]}")
+        print(f"      canon : {f.canon[:150]}")
+        print(f"      why   : {f.why[:150]}")
     for n in notes:
         print(f"\n  note: {n}")
     if args.out:
@@ -323,7 +345,7 @@ def main() -> int:
             encoding="utf-8",
         )
         print(f"\nwritten: {args.out}")
-    return 1 if findings else 0
+    return 1 if canon_hits else 0
 
 
 if __name__ == "__main__":

@@ -64,6 +64,7 @@ def absent_today(
     day: int,
     log_events_today: list,
     extra: set[str] | None = None,
+    people: dict[str, Person] | None = None,
 ) -> set[str]:
     """Who demonstrably did not work today: in hospital, convalescing at home,
     sheltering under a curfew, or keeping away from somewhere they fear.
@@ -81,6 +82,17 @@ def absent_today(
     out |= {pid for pid, (until, _) in state.in_hospital.items() if day < until}
     out |= {pid for pid, until in state.rest.items() if day < until}
     out |= extra or set()
+    # And the one signal no wording can hide: a person with a workplace who
+    # never left the house. A scene that narrates someone staying in writes
+    # free text ("stays home, calls the school") that no list will ever match,
+    # but it cannot fake a trip that did not happen.
+    if people is not None:
+        went_out = {
+            e.payload.get("person") for e in log_events_today if e.type == "trip.start"
+        }
+        for p in people.values():
+            if p.work_id and p.age >= 18 and p.id not in went_out:
+                out.add(p.id)
     out.discard(None)
     return out
 
@@ -242,7 +254,7 @@ def daily_finance_tick(
     """Earn, spend, pay bills, borrow when short, accrue interest.
     Returns ([(event, caused_by)] to commit now, {person: p_financial})."""
     out: list[tuple[TimedEvent, int | None]] = []
-    absent = absent_today(state, day, log_events_today, extra_absent)
+    absent = absent_today(state, day, log_events_today, extra_absent, people)
     t_night = (day + 1) * SECONDS_PER_DAY - 600
 
     by_hh: dict[str, list[Person]] = {}
