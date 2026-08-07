@@ -283,12 +283,34 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   306 people, 225/day at 11k, still climbing), which is wrong on its face.
   **Step 1 (the V3 block, done)** — `oldcity`, a four-peth extract, opt-in via
   `--block` so the Kasba pin and every soak hash stay frozen. 12k households /
-  46.7k people run at 74 s/sim-day, n^1.12.
-  **Open, for step 2 (IPF):** synthesised household size was 3.89 against the
-  2011 ward census's 4.14 for the Kasbavishrambaug ward office — the hand-written
-  `HOUSEHOLD_TEMPLATES` mix is close but not fitted, and fitting it to ward
-  marginals (households, population, sex, 0–6, SC/ST, literacy — all present in
-  `pune_ward_census_2011.csv`) is exactly what the IPF step is for.
+  49.6k people run at 86 s/sim-day.
+  **Step 2 (population calibration, done)** — demography is now a per-block
+  table chosen by `block.name` (`population/demography.py`), fitted offline by
+  `scripts/fit_synthesis.py` to the Kasbavishrambaug ward office's marginals:
+  household size 4.1315 vs 4.1380, male share 0.4940 vs 0.4954, under-7 share
+  0.0717 vs 0.0726. Kasba keeps the V0 numbers to the digit. Fitted to *ratios*,
+  not counts — the ward office is 13 wards and 43,138 households, larger than the
+  four-peth block, so totals do not tile.
+
+  Not the IPF of the original plan, and deliberately so: real IPF needs the
+  age×sex×ward joint tables from the District Census Handbook, which §7 still
+  defers. Reweighting templates against the marginals we *do* hold is sufficient
+  to reach them, and the honest limit is written into the module.
+
+  The methodological finding is worth carrying into every later calibration:
+  left unconstrained, the fit matched all three marginals through knobs that
+  mean nothing — PG rooms at 42% male in a student city, single-elder households
+  at 2%. The error it was absorbing is really widowhood (couples plus children
+  land near 51% male; the route below 50% is that men in the senior cohort die
+  first). Bounding the knobs and adding the mechanism made the search find it.
+  **A calibration that hits its targets is not thereby correct.**
+
+  **Open, for step 3:** `nuclear_nokids` sits at 0.04 because nothing in three
+  marginals distinguishes a childless couple from an empty nest; a fourth
+  (literacy or the age bands) would pin it. Then the trip engine on the road
+  graph — `oldcity_roads.geojson` is 2,057 ways and still unused, walking is
+  haversine × 1.4 — plus cohorts, which is what the residual linear constant in
+  the scale probe is waiting for.
 - **V4+ — Arcs, courts, QC depth, scale-out.** 90-day soak, budget governor,
   evaluation harness, full collective dynamics (09), election-class process
   test — note the real Jan 2026 PMC election already happened (41 prabhags),

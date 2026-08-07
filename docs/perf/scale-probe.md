@@ -56,7 +56,7 @@ giveaway is not the runtime — it is this:
 | 320 | 1,266 | 67.2 | 15.5 |
 | 1,280 | 5,000 | 141.9 | 17.3 |
 | 2,880 | 11,240 | **224.9** | **17.4** |
-| 12,000 *(oldcity)* | 46,671 | — | **20.2** |
+| 12,000 *(oldcity)* | 49,578 | — | **21.1** |
 
 How many people you exchange news with in a day was a function of how big the
 city is. A person in an 11k-person world was holding 225 information exchanges a
@@ -113,17 +113,23 @@ point.
 
 | households | people | s / sim-day | peak RSS | events/day | co-presence/day |
 |---:|---:|---:|---:|---:|---:|
-| 3,000 | 11,703 | 16.4 | 222 MB | 54,472 | 199,724 |
-| 6,000 | 23,269 | 29.2 | 375 MB | 105,765 | 429,562 |
-| 12,000 | **46,671** | **73.2** | 712 MB | 214,282 | 941,680 |
+| 3,000 | 12,438 | 22.2 | 232 MB | 59,148 | 201,182 |
+| 6,000 | 24,716 | 35.7 | 401 MB | 114,266 | 475,869 |
+| 12,000 | **49,578** | **86.1** | 754 MB | 231,609 | 1,048,452 |
 
-Segment slopes: time n^0.84 → n^1.32, co-presence n^1.11 → n^1.13.
+Segment slopes: time n^0.70 → n^1.26, co-presence n^1.25 → n^1.13.
 
-**V3's exit population runs at 73 seconds per sim-day with zero LLM calls** — a
-30-day clockwork soak in 37 minutes, against the twelve-minutes-per-sim-day the
-pre-fix engine was heading for. Population synthesises to 46,671 people; the census's
-old-city ward office holds 178,484 across 13 wards, of which this four-peth
-block is a part, so the block is a subset rather than a match — see
+**V3's exit population runs at 86 seconds per sim-day with zero LLM calls** — a
+30-day clockwork soak in 43 minutes, against the twelve-minutes-per-sim-day the
+pre-fix engine was heading for.
+
+These rows are measured on the *calibrated* population (V3 step 2), which is
+why they are ~18% slower than the first pass: fitting the household mix to the
+census put 49,578 people in 12,000 households rather than 46,671, and more of
+them in joint families sharing a home. Paying that is the point — the earlier
+number was cheaper because the population was wrong. The census's old-city ward
+office holds 178,484 people across 13 wards and this four-peth block is a part
+of it, so the block is a subset rather than a match; see
 `population/demography.py` for the ratio marginals it *is* held to.
 
 Note the two ladders disagree about the exponent — kasba still reads n^1.86 at
