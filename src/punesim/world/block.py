@@ -57,9 +57,12 @@ DEFAULT_MAX_HOMES = 400
 # it stays the default forever. `oldcity` is V3's block — the same core widened
 # to four peths (438 named places, 7,008 buildings; households stack into them
 # because a wada is a compound, not a family).
+# places file, roads file, and whether walking uses the road graph. Kasba routes
+# straight-line for ever: every determinism hash and every soak in docs/soaks/
+# is a function of its travel times, and a road graph changes all of them.
 BLOCKS = {
-    "kasba": "data/anchors/kasba_places.geojson",
-    "oldcity": "data/anchors/oldcity_places.geojson",
+    "kasba": ("data/anchors/kasba_places.geojson", "data/anchors/kasba_roads.geojson", False),
+    "oldcity": ("data/anchors/oldcity_places.geojson", "data/anchors/oldcity_roads.geojson", True),
 }
 DEFAULT_BLOCK = "kasba"
 
@@ -112,8 +115,10 @@ def _classify(props: dict) -> str | None:
 class Block:
     """Immutable V0 world model: named places + home candidates."""
 
-    def __init__(self, places: list[Place], homes: list[Place], name: str = "kasba"):
+    def __init__(self, places: list[Place], homes: list[Place], name: str = "kasba",
+                 roads=None):
         self.name = name
+        self.roads = roads  # RoadGraph | None — None means straight-line walking
         self.places = places
         self.homes = homes
         self._by_id = {p.id: p for p in [*places, *homes]}
@@ -123,6 +128,7 @@ class Block:
         # distance calculations in a 4-day 11k-person probe.
         self._of_kind: dict[frozenset[str], list[Place]] = {}
         self._nearest: dict[tuple[str, frozenset[str]], Place | None] = {}
+        self._walk: dict[tuple[str, str], int] = {}
 
     def __getitem__(self, place_id: str) -> Place:
         return self._by_id[place_id]
@@ -151,9 +157,26 @@ class Block:
         return found
 
     def walk_seconds(self, a_id: str, b_id: str) -> int:
+        """How long it takes to walk between two places.
+
+        Along the streets where the block has a road graph and both ends reach
+        it; a straight line times DETOUR_FACTOR otherwise. The constant is a
+        fair average — measured against the real graph its median is 1.29 — but
+        it cannot know about the trips that go the long way round, and those
+        run to 3.4x. Cached: the same pairs recur every day of a run.
+        """
+        key = (a_id, b_id)
+        hit = self._walk.get(key)
+        if hit is not None:
+            return hit
         a, b = self._by_id[a_id], self._by_id[b_id]
-        d = haversine_m(a.lat, a.lon, b.lat, b.lon) * DETOUR_FACTOR
-        return max(60, int(d / WALK_SPEED_MPS))
+        d = None
+        if self.roads is not None:
+            d = self.roads.metres(a_id, (a.lat, a.lon), b_id, (b.lat, b.lon))
+        if d is None:
+            d = haversine_m(a.lat, a.lon, b.lat, b.lon) * DETOUR_FACTOR
+        out = self._walk[key] = self._walk[(b_id, a_id)] = max(60, int(d / WALK_SPEED_MPS))
+        return out
 
     @classmethod
     def load(
@@ -188,7 +211,8 @@ class Block:
         return cls(places, homes[:max_homes], name=name)
 
 
-def load_for(n_households: int, block: str = DEFAULT_BLOCK, **kw) -> Block:
+def load_for(n_households: int, block: str = DEFAULT_BLOCK, roads: bool | None = None,
+             **kw) -> Block:
     """The block a run of this size needs.
 
     Below the cap this is exactly `Block.load()`, so every existing run keeps
@@ -198,5 +222,15 @@ def load_for(n_households: int, block: str = DEFAULT_BLOCK, **kw) -> Block:
     """
     if block not in BLOCKS:
         raise ValueError(f"unknown block {block!r}; known: {', '.join(sorted(BLOCKS))}")
-    return Block.load(BLOCKS[block], max_homes=max(DEFAULT_MAX_HOMES, n_households),
-                      name=block, **kw)
+    places_path, roads_path, route = BLOCKS[block]
+    if roads is not None:
+        route = roads
+    world = Block.load(places_path, max_homes=max(DEFAULT_MAX_HOMES, n_households),
+                       name=block, **kw)
+    if route and Path(roads_path).exists():
+        from .roads import RoadGraph
+
+        graph = RoadGraph.load(roads_path)
+        graph.prepare({p.id: (p.lat, p.lon) for p in world.places})
+        world.roads = graph
+    return world
