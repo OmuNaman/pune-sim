@@ -132,8 +132,8 @@ def synthesize(
 ) -> tuple[list[Household], dict[str, Person]]:
     households: list[Household] = []
     people: dict[str, Person] = {}
-    if len(block.homes) < n_households:
-        raise ValueError(f"only {len(block.homes)} home candidates for {n_households} households")
+    if not block.homes:
+        raise ValueError("block has no home candidates")
 
     # Deterministic home assignment: shuffle candidates once with a keyed draw.
     order = keyed_rng(run_seed, "synth", "block", 0, "home_order").permutation(len(block.homes))
@@ -149,7 +149,13 @@ def synthesize(
         template = _weighted(rng, HOUSEHOLD_TEMPLATES)
         religion = quota[rperm[i]]
         surname = _pick(rng, names.SURNAME[religion])
-        home = block.homes[order[i]]
+        # Pune's old city is wada housing: one mapped OSM building is a compound
+        # holding several households, not one family. The 2011 ward census puts
+        # Kasba Ganpati at 3,848 households against far fewer buildings, so
+        # stacking is the ground truth rather than a workaround for a thin
+        # extract. Below the pool size nothing stacks and every existing run
+        # keeps the home assignment it had.
+        home = block.homes[order[i % len(order)]]
 
         members: list[tuple[str, int, str | None]] = []  # (sex, age, surname_override)
         if template == "nuclear_kids":

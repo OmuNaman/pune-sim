@@ -175,7 +175,19 @@ class Block:
         return cls(places, homes[:max_homes])
 
 
-def load_for(n_households: int, **kw) -> Block:
+# Named blocks, built by scripts/fetch_osm_block.py. `kasba` is the V0-V2 pin:
+# every determinism hash and every soak in docs/soaks/ is a function of it, so
+# it stays the default forever. `oldcity` is V3's block — the same core widened
+# to four peths (438 named places, 7,008 buildings against the ~10k households
+# the 2011 ward census counts there, which is what a wada is).
+BLOCKS = {
+    "kasba": "data/anchors/kasba_places.geojson",
+    "oldcity": "data/anchors/oldcity_places.geojson",
+}
+DEFAULT_BLOCK = "kasba"
+
+
+def load_for(n_households: int, block: str = DEFAULT_BLOCK, **kw) -> Block:
     """The block a run of this size needs.
 
     Below the cap this is exactly `Block.load()`, so every existing run keeps
@@ -183,4 +195,6 @@ def load_for(n_households: int, **kw) -> Block:
     permutation over the whole pool, so *any* change to the pool size reshuffles
     everyone — which is why the cap does not simply track the extract.
     """
-    return Block.load(max_homes=max(DEFAULT_MAX_HOMES, n_households), **kw)
+    if block not in BLOCKS:
+        raise ValueError(f"unknown block {block!r}; known: {', '.join(sorted(BLOCKS))}")
+    return Block.load(BLOCKS[block], max_homes=max(DEFAULT_MAX_HOMES, n_households), **kw)

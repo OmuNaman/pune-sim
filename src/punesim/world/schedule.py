@@ -36,19 +36,27 @@ def roaming_worksites(
     """
     occupied = sorted({p.home_id for p in people.values()})
     out: dict[str, tuple[str, ...]] = {}
+    # Everyone living in the same building sees the same buildings in the same
+    # order, and with wada stacking that is several households, not one. Sorting
+    # 7,000 candidate homes per worker was 10M distance calculations before a
+    # single day had been simulated.
+    near_by_home: dict[str, list[str]] = {}
     for pid in sorted(people):
         p = people[pid]
         if p.work_id is not None or p.occupation not in ROAMING_WORK or not 18 <= p.age < 62:
             continue
         rng = keyed_rng(run_seed, "worksite", pid, 0, "assign")
         if p.occupation == "domestic_worker":
-            src = block.get(p.home_id)
-            pool = [h for h in occupied if h != p.home_id and block.get(h)]
-            if src is not None:
-                pool.sort(
-                    key=lambda h: (haversine_m(src.lat, src.lon, block[h].lat, block[h].lon), h)
-                )
-            near = pool[:NEAR_CLIENT_POOL]
+            cached = near_by_home.get(p.home_id)
+            if cached is None:
+                src = block.get(p.home_id)
+                pool = [h for h in occupied if h != p.home_id and block.get(h)]
+                if src is not None:
+                    pool.sort(
+                        key=lambda h: (haversine_m(src.lat, src.lon, block[h].lat, block[h].lon), h)
+                    )
+                cached = near_by_home[p.home_id] = pool[:NEAR_CLIENT_POOL]
+            near = list(cached)
             picks: list[str] = []
             while near and len(picks) < CLIENTS_PER_DOMESTIC:
                 picks.append(near.pop(int(rng.integers(0, len(near)))))

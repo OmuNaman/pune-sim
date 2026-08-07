@@ -19,6 +19,7 @@ If the raw JSON already exists it is reused (the pin is the point); pass
 
 from __future__ import annotations
 
+import argparse
 import sys
 import urllib.error
 import urllib.parse
@@ -46,27 +47,43 @@ except ImportError:  # pragma: no cover - orjson is a project dep
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ANCHORS = REPO_ROOT / "data" / "anchors"
-RAW_PATH = ANCHORS / "osm_kasba_block_raw.json"
-ROADS_PATH = ANCHORS / "kasba_roads.geojson"
-PLACES_PATH = ANCHORS / "kasba_places.geojson"
 
-BBOX = "18.510,73.850,18.522,73.862"  # south,west,north,east
+# Named extracts, south,west,north,east. `kasba` is the V0-V2 pin: every
+# determinism hash and every soak in docs/soaks/ is a function of it, so its
+# bbox is frozen. `oldcity` is V3's block — the same old-city core widened to
+# Kasba + Shaniwar + Budhwar + Raviwar, because Kasba alone yields 2,880 home
+# candidates and V3 needs 12k households.
+EXTRACTS = {
+    "kasba": {
+        "bbox": "18.510,73.850,18.522,73.862",
+        "raw": "osm_kasba_block_raw.json",
+        "roads": "kasba_roads.geojson",
+        "places": "kasba_places.geojson",
+    },
+    "oldcity": {
+        "bbox": "18.505,73.845,18.532,73.870",
+        "raw": "osm_oldcity_raw.json",
+        "roads": "oldcity_roads.geojson",
+        "places": "oldcity_places.geojson",
+    },
+}
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
 
-QUERY = f"""[out:json][timeout:180];
+def query(bbox: str) -> str:
+    return f"""[out:json][timeout:600];
 (
-  way["building"]({BBOX});
-  way["highway"]({BBOX});
-  nwr["amenity"]({BBOX});
-  nwr["shop"]({BBOX});
-  nwr["leisure"]({BBOX});
-  nwr["healthcare"]({BBOX});
-  nwr["religion"]({BBOX});
-  node["place_of_worship"]({BBOX});
+  way["building"]({bbox});
+  way["highway"]({bbox});
+  nwr["amenity"]({bbox});
+  nwr["shop"]({bbox});
+  nwr["leisure"]({bbox});
+  nwr["healthcare"]({bbox});
+  nwr["religion"]({bbox});
+  node["place_of_worship"]({bbox});
 );
 out geom;"""
 
@@ -86,8 +103,8 @@ KEEP_TAGS = (
 POI_KEYS = ("amenity", "shop", "religion", "leisure", "healthcare")
 
 
-def download(dest: Path) -> None:
-    data = urllib.parse.urlencode({"data": QUERY}).encode("ascii")
+def download(dest: Path, bbox: str) -> None:
+    data = urllib.parse.urlencode({"data": query(bbox)}).encode("ascii")
     last_err: Exception | None = None
     for url in OVERPASS_ENDPOINTS:
         req = urllib.request.Request(
@@ -95,7 +112,7 @@ def download(dest: Path) -> None:
         )
         try:
             print(f"POST {url} ...")
-            with urllib.request.urlopen(req, timeout=200) as resp:
+            with urllib.request.urlopen(req, timeout=900) as resp:
                 body = resp.read()
             _loads(body)  # validate before writing
             dest.write_bytes(body)
@@ -168,24 +185,37 @@ def convert(raw: dict) -> tuple[dict, dict]:
 
 
 def main() -> None:
-    ANCHORS.mkdir(parents=True, exist_ok=True)
-    if "--force-download" in sys.argv or not RAW_PATH.exists():
-        download(RAW_PATH)
-    else:
-        print(f"reusing existing {RAW_PATH.name} (pass --force-download to refetch)")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--extract", choices=sorted(EXTRACTS), default="kasba",
+                    help="which named block to build (kasba is the frozen V0-V2 pin)")
+    ap.add_argument("--force-download", action="store_true")
+    args = ap.parse_args()
 
-    raw = _loads(RAW_PATH.read_bytes())
+    spec = EXTRACTS[args.extract]
+    raw_path = ANCHORS / spec["raw"]
+    roads_path = ANCHORS / spec["roads"]
+    places_path = ANCHORS / spec["places"]
+
+    ANCHORS.mkdir(parents=True, exist_ok=True)
+    if args.force_download or not raw_path.exists():
+        download(raw_path, spec["bbox"])
+    else:
+        print(f"reusing existing {raw_path.name} (pass --force-download to refetch)")
+
+    raw = _loads(raw_path.read_bytes())
     roads, places = convert(raw)
-    ROADS_PATH.write_bytes(_dumps(roads))
-    PLACES_PATH.write_bytes(_dumps(places))
+    roads_path.write_bytes(_dumps(roads))
+    places_path.write_bytes(_dumps(places))
 
     n_poly = sum(
         1 for f in places["features"] if f["geometry"]["type"] == "Polygon"
     )
     n_pt = len(places["features"]) - n_poly
-    print(f"{ROADS_PATH.name}: {len(roads['features'])} LineString features")
-    print(f"{PLACES_PATH.name}: {len(places['features'])} features "
+    print(f"{roads_path.name}: {len(roads['features'])} LineString features")
+    print(f"{places_path.name}: {len(places['features'])} features "
           f"({n_poly} Polygons, {n_pt} Points)")
+    print(f"bbox {spec['bbox']}  raw {raw_path.stat().st_size:,} B  "
+          f"places {places_path.stat().st_size:,} B")
 
 
 if __name__ == "__main__":

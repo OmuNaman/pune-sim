@@ -49,7 +49,8 @@ INJECTION = {
 }
 
 
-def run_rung(households: int, days: int, seed: int, db: Path, profile: bool) -> dict:
+def run_rung(households: int, days: int, seed: int, db: Path, profile: bool,
+             block_name: str = "kasba") -> dict:
     """One rung, in this process. Returns the measurement row."""
     from punesim import engine
     from punesim.kernel.log import EventLog
@@ -63,7 +64,7 @@ def run_rung(households: int, days: int, seed: int, db: Path, profile: bool) -> 
     db.parent.mkdir(parents=True, exist_ok=True)
 
     t_load = time.perf_counter()
-    block = load_for(households)
+    block = load_for(households, block_name)
     hhs, people = synthesize(seed, block, n_households=households)
     setup_s = time.perf_counter() - t_load
 
@@ -89,6 +90,7 @@ def run_rung(households: int, days: int, seed: int, db: Path, profile: bool) -> 
 
     row = {
         "households": households,
+        "block": block_name,
         "people": len(people),
         "places": len(block.places),
         "days": days,
@@ -166,13 +168,14 @@ def main() -> int:
     ap.add_argument("--profile", action="store_true", help="cProfile the largest rung")
     ap.add_argument("--out", default="docs/perf/scale-probe.json")
     ap.add_argument("--db-dir", default=None, help="where rung dbs go (default: a temp dir)")
+    ap.add_argument("--block", default="kasba", help="named block: kasba (V0-V2 pin) | oldcity (V3)")
     args = ap.parse_args()
 
     db_dir = Path(args.db_dir) if args.db_dir else Path("runs/probe")
 
     if args.rung is not None:
         row = run_rung(args.rung, args.days, args.seed,
-                       db_dir / f"probe-{args.rung}.db", args.profile)
+                       db_dir / f"probe-{args.block}-{args.rung}.db", args.profile, args.block)
         print("@@ROW@@" + json.dumps(row))
         return 0
 
@@ -181,7 +184,7 @@ def main() -> int:
     for i, n in enumerate(sizes):
         last = i == len(sizes) - 1
         cmd = [sys.executable, __file__, "--rung", str(n), "--days", str(args.days),
-               "--seed", str(args.seed), "--db-dir", str(db_dir)]
+               "--seed", str(args.seed), "--db-dir", str(db_dir), "--block", args.block]
         if args.profile and last:
             cmd.append("--profile")
         print(f"-- rung {n} households ...", flush=True)
@@ -215,7 +218,8 @@ def main() -> int:
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps({"days": args.days, "seed": args.seed, "rows": rows},
+    out.write_text(json.dumps({"days": args.days, "seed": args.seed,
+                               "block": args.block, "rows": rows},
                               indent=2), encoding="utf-8")
     print(f"\nwrote {out}")
     return 0 if len(ok) == len(rows) else 1
