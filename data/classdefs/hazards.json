@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Hazard classes as data (architecture §2 EVENTS: 'new event types are data, not code').",
+    "Adding one needs no Python. Order is load-bearing: it fixes the sequence of keyed",
+    "draws in hazards.sample_day, and so the determinism hash.",
+    "",
+    "p_per_day is ABSOLUTE, not per-capita — the same 0.25 hazards a day whether the",
+    "world holds 306 people or 49,578. Held against population that is 298 per 1,000",
+    "per year at 306 and 1.84 at 49,578, so the values below are tuned for narrative",
+    "density in a small world and are NOT calibrated to Pune. The architecture names",
+    "NCRB city tables as the source; none is vendored yet. See docs/soaks/v3-scale-soak.md.",
+    "",
+    "narratability (08-identity §5): full = a scene may open on it; abstract = it may be",
+    "referred to but not staged; numeric = it happens and is counted, and no scene ever",
+    "opens on it regardless of attention. NCRB calibration will generate classes that",
+    "must be numeric."
+  ],
+  "classes": [
+    {
+      "type": "hazard.road.collision",
+      "p_per_day": 0.10,
+      "window": ["08:00", "20:00"],
+      "shape": "point",
+      "predicate": "collision",
+      "topics": ["safety"],
+      "charge": 0.85,
+      "narratability": "full",
+      "provenance": "estimate"
+    },
+    {
+      "type": "hazard.water.supply_cut",
+      "p_per_day": 0.06,
+      "window": ["06:00", "09:00"],
+      "shape": "area",
+      "predicate": "supply_cut",
+      "topics": ["water"],
+      "charge": 0.6,
+      "narratability": "full",
+      "provenance": "estimate"
+    },
+    {
+      "type": "hazard.power.outage",
+      "p_per_day": 0.07,
+      "window": ["10:00", "22:00"],
+      "shape": "area",
+      "predicate": "outage",
+      "topics": ["power"],
+      "charge": 0.35,
+      "narratability": "full",
+      "provenance": "estimate"
+    },
+    {
+      "type": "hazard.fire.small",
+      "p_per_day": 0.02,
+      "window": ["09:00", "23:00"],
+      "shape": "point",
+      "predicate": "fire",
+      "topics": ["safety"],
+      "charge": 0.9,
+      "narratability": "full",
+      "provenance": "estimate"
+    }
+  ]
+}

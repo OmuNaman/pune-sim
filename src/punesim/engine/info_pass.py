@@ -57,7 +57,7 @@ def _info_pass(
             ]
         )[0]
 
-    by_type = {c[0]: c for c in hazards_mod.CLASSES}
+    by_type = hazards_mod.BY_TYPE
     by_seq_today = {e.seq: e for e in today}
     for e in today:
         # percept sources: any hazard, plus any user-injected PLACED event that
@@ -71,11 +71,17 @@ def _info_pass(
         if not (is_hazard or is_public) or not e.payload.get("place"):
             continue
         cls = by_type.get(e.type)
-        shape = cls[3] if cls else "point"
-        predicate = cls[4] if cls else e.type.rsplit(".", 1)[-1]
-        topics = cls[5] if cls else ("safety",)
+        # A class the world is allowed to count but never to stage seeds no
+        # claim and opens no scene, however hard attention is pointed at it
+        # (08-identity §5). Nothing today is `numeric`; NCRB calibration will
+        # add classes that must be.
+        if cls is not None and cls.countable_only:
+            continue
+        shape = cls.shape if cls else "point"
+        predicate = cls.predicate if cls else e.type.rsplit(".", 1)[-1]
+        topics = cls.topics if cls else ("safety",)
         if cls:
-            charge = cls[6]
+            charge = cls.charge
         else:
             sev = e.payload.get("severity")
             charge = min(1.0, 0.45 + 0.5 * float(sev)) if sev is not None else 0.7

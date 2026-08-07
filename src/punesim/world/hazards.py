@@ -14,15 +14,13 @@ from ..kernel.rng import keyed_rng
 from ..kernel.timebase import SECONDS_PER_DAY
 from ..minds.info import WITNESS_CREDENCE, Claim, render_text
 from ..population.synth import Person
+from . import classdefs
 from .block import Block, haversine_m
 
-# (type, p_per_day, window_s, shape, predicate, topics, charge)
-CLASSES: list[tuple[str, float, tuple[int, int], str, str, tuple[str, ...], float]] = [
-    ("hazard.road.collision", 0.10, (8 * 3600, 20 * 3600), "point", "collision", ("safety",), 0.85),
-    ("hazard.water.supply_cut", 0.06, (6 * 3600, 9 * 3600), "area", "supply_cut", ("water",), 0.6),
-    ("hazard.power.outage", 0.07, (10 * 3600, 22 * 3600), "area", "outage", ("power",), 0.35),
-    ("hazard.fire.small", 0.02, (9 * 3600, 23 * 3600), "point", "fire", ("safety",), 0.9),
-]
+# Loaded from data/classdefs/hazards.json — adding a class needs no Python.
+# Order is load-bearing: it fixes the sequence of keyed draws below.
+CLASSES = classdefs.load()
+BY_TYPE = {c.type: c for c in CLASSES}
 
 NEARBY_M = 220.0  # you notice the commotion from a couple of lanes away
 AREA_M = 320.0  # an area hazard (water cut, outage) covers homes within this
@@ -102,7 +100,9 @@ def sample_day(
     named = sorted((p for p in block.places if p.name), key=lambda p: p.id)
     if not named:
         return out
-    for cls, rate, (w0, w1), shape, predicate, topics, charge in CLASSES:
+    for cd in CLASSES:
+        cls, rate, (w0, w1) = cd.type, cd.p_per_day, cd.window
+        shape, predicate, topics, charge = cd.shape, cd.predicate, cd.topics, cd.charge
         rng = keyed_rng(run_seed, "hazard", cls, day, "realize")
         if rng.random() >= rate:
             continue
