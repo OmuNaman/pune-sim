@@ -298,3 +298,46 @@ def test_only_a_casualty_gets_an_ambulance(tmp_path, world):
         assert utility, "a utility failed and no institution anywhere noticed"
         for e in utility:
             assert e.caused_by is not None
+
+
+def test_the_lights_coming_back_is_news(tmp_path, world):
+    """soak3's only continuity failure: the power was restored at 23:54 and
+    nobody was ever told, because utility.restored carries {org, place,
+    utility} and every lane that carries news is person-scoped. The scenes
+    reasonably concluded the blackout was still running — two days by day 16,
+    a week by day 20."""
+    block, hhs, people = world
+    spot = max(
+        (p for p in block.places if p.name),
+        key=lambda p: sum(1 for q in people.values() if q.home_id and
+                          hazards.haversine_m(p.lat, p.lon, block[q.home_id].lat,
+                                              block[q.home_id].lon) <= hazards.AREA_M),
+    )
+    inj = engine.Injection(day=0, time_s=20 * 3600, type="hazard.power.outage",
+                           place=spot.id, severity=0.4)
+    log = EventLog(tmp_path / "restore.db")
+    _, state = engine.run_simulation(log, SEED, block, hhs, people, days=2, injections=[inj])
+
+    restored = list(log.events(type="utility.restored"))
+    assert restored, "the power never came back at all"
+    told = [
+        e for e in log.events(type="info.heard")
+        if e.payload["claim"]["predicate"] == "restored"
+    ]
+    assert told, "the world fixed the power and told nobody"
+    seen_it = [e for e in told if e.payload["channel"] == "witness"]
+    assert seen_it and all(e.caused_by == restored[0].seq for e in seen_it)
+    # good news travels too — relayed hearings point at the hop before them
+    assert all(e.caused_by is not None for e in told)
+
+    # ...and the trouble it resolves stops being live for the people who saw it
+    outage_key = next(
+        e.payload["claim_key"] for e in log.events(type="info.heard")
+        if e.payload["claim"]["predicate"] == "outage"
+    )
+    knew = {e.payload["person"] for e in told}
+    still_live = [
+        pid for pid in knew
+        if (h := state.info.holdings.get(pid, {}).get(outage_key)) and not h.stifled
+    ]
+    assert not still_live, f"{len(still_live)} people saw the lights come back and kept spreading the outage"

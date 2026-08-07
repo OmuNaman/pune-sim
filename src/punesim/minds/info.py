@@ -119,6 +119,8 @@ _PREDICATE_PHRASE = {
     "adulterated": "the food at {subject} is adulterated",
     "communal_tension": "there was trouble near {subject} — the air has turned tense, people say stay away",
     "clash": "there was a clash near {subject}",
+    "restored": "the power is back around {subject}",
+    "water_tanker": "a municipal water tanker has come to {subject}",
 }
 
 

@@ -73,6 +73,7 @@ _ROUTINE_TYPES = {"trip.start", "trip.end", "activity.start"}
 # memory_digest(); it never leaks in through here.
 _SELF_OUTPUT_TYPES = frozenset({
     "scene.morning", "scene.reaction", "scene.skipped", "scene.invalid_ref",
+    "scene.gate_capped",
     "memory.formed", "mood.delta", "plan.revised",
     # A street exchange is the camera rendering a transmission that already
     # happened. The information itself reaches the household through the

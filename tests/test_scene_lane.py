@@ -368,3 +368,44 @@ def test_a_memory_pins_the_day_it_means(tmp_path, world):
     engine.run_simulation(log, SEED, block, hhs, people, days=1, gateway=gw, scenes_k=1)
     summaries = [e.payload["summary"] for e in log.events(type="memory.formed")]
     assert summaries and all("last night" not in s.lower() for s in summaries)
+
+
+def test_a_mass_event_costs_more_scenes_but_not_unbounded_scenes(tmp_path, world):
+    """One power cut gate-marked 78 of 80 households, and the third soak spent
+    67 scenes on a single day — thirteen normal days — because nothing capped
+    the routine-bypass gate. A mass event should mean MORE scenes, not all of
+    them, and the households dropped should be named rather than vanish."""
+    block, hhs, people = world
+    spot = max(
+        (p for p in block.places if p.name),
+        key=lambda p: sum(
+            1 for q in people.values()
+            if engine.hazards_mod.haversine_m(
+                p.lat, p.lon, block[q.home_id].lat, block[q.home_id].lon
+            ) <= engine.hazards_mod.AREA_M
+        ),
+    )
+    inj = engine.Injection(day=0, time_s=18 * 3600, type="info.rumor", place=spot.id,
+                           participants=tuple(q.id for q in people.values() if q.age >= 16),
+                           payload={"credence": 0.95, "claim": {
+                               "key": "cl:mass", "subject": spot.id,
+                               "predicate": "contaminated", "topics": ["water"],
+                               "charge": 0.9, "specificity": 0.6, "veracity": "false"}})
+    t = ScriptedTransport([_delta()] * 200)
+    log = EventLog(tmp_path / "cap.db")
+    gw = Gateway(_cfg(tmp_path), Cassette(tmp_path / "c.db"), transport=t, log=log)
+    k = 3
+    engine.run_simulation(
+        log, SEED, block, hhs, people, days=3, gateway=gw, scenes_k=k, injections=[inj],
+    )
+    per_day: dict[int, int] = {}
+    for e in log.events(type="scene.morning"):
+        per_day[e.sim_time // 86400] = per_day.get(e.sim_time // 86400, 0) + 1
+    assert per_day, "no scenes rendered at all"
+    worst = max(per_day.values())
+    assert worst <= k * engine.GATE_BURST, f"a single day rendered {worst} scenes with k={k}"
+    assert worst > k, "the mass event bought no extra scenes at all"
+    capped = list(log.events(type="scene.gate_capped"))
+    if capped:
+        p = capped[0].payload
+        assert p["marked"] > p["rendered"] and p["dropped"], "truncation went unrecorded"

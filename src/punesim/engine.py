@@ -39,6 +39,7 @@ NO_WORK = {"homemaker", "retired", "infant"}
 P_THRESHOLD = 0.6
 HYSTERESIS = 0.15
 HYSTERESIS_DAYS = 20
+GATE_BURST = 3  # a big day may render 3x k scenes; beyond that it is a budget hole
 _ROUTINE_TYPES = ("trip.start", "trip.end", "activity.start")
 
 # (sim_time, person_key, type, event, provenance)
@@ -76,6 +77,14 @@ class Injection:
 # institution on the other end that is simply not a medical emergency. Keying
 # on the presence of a place instead sent an ambulance to a water cut.
 CASUALTY_PREFIXES = ("hazard.road.collision", "hazard.fire.small", "hazard.violence")
+
+# Events that END a trouble. They are place-scoped, so without their own
+# percept lane they reach nobody at all -> (predicate, topics) for the claim
+# the neighbourhood forms when it notices relief arriving.
+RESOLUTION_PREDICATES = {
+    "utility.restored": ("restored", ("power",)),
+    "utility.tanker_arrived": ("water_tanker", ("water",)),
+}
 
 
 def _utility_reactions(
@@ -538,6 +547,7 @@ def _info_pass(
         )[0]
 
     by_type = {c[0]: c for c in hazards_mod.CLASSES}
+    by_seq_today = {e.seq: e for e in today}
     for e in today:
         # percept sources: any hazard, plus any user-injected PLACED event that
         # is not itself information — a public assassination, a procession, a
@@ -579,6 +589,47 @@ def _info_pass(
                 pid, variant, credence, day, seq, source="witness",
                 t_abs=heard.sim_time, channel="witness",
             )
+
+    # Relief is news too. The third soak's ONLY continuity failure was that the
+    # power came back at 23:54 and nobody was ever told: utility.restored
+    # carries {org, place, utility}, so it seeded no percept, matched no member
+    # in any prompt, and the scenes reasonably concluded the blackout was still
+    # running — two days by day 16, a week by day 20. Place-scoped events have
+    # to reach the people whose lives they change, or the world silently fixes
+    # things behind everyone's back.
+    for e in today:
+        if e.type not in RESOLUTION_PREDICATES or not e.payload.get("place"):
+            continue
+        cause = by_seq_today.get(e.caused_by)
+        if cause is None or not cause.type.startswith("hazard."):
+            continue
+        predicate, topics = RESOLUTION_PREDICATES[e.type]
+        good = hazards_mod.hazard_claim(
+            e.type, e.payload["place"], day, predicate, topics, 0.35, block
+        )
+        good = replace(good, valence=0.5, veracity="true")
+        good = replace(good, text=info_mod.render_text(good, block))
+        stale_key = f"cl:{cause.type.split('.', 1)[1]}:{e.payload['place']}:d{cause.sim_time // SECONDS_PER_DAY}"
+        for pid, spec in sorted(
+            hazards_mod.witness_tiers(e.payload["place"], e.sim_time, "area", block, people, intervals)
+        ):
+            if good.key in state.info.holdings.get(pid, {}):
+                continue
+            variant = replace(good, specificity=spec)
+            variant = replace(variant, text=info_mod.render_text(variant, block))
+            credence = hazards_mod.witness_credence(spec)
+            h2 = info_mod.Heard(e.sim_time + 120, pid, variant, "witness", "witness", credence, e.seq)
+            seq = commit_heard(h2)
+            state.info.hear(
+                pid, variant, credence, day, seq, source="witness",
+                t_abs=h2.sim_time, channel="witness",
+            )
+            # ...and the trouble it resolves stops being live for them: they no
+            # longer act on it and no longer pass it on.
+            old = state.info.holdings.get(pid, {}).get(stale_key)
+            if old is not None:
+                old.credence = min(old.credence, 0.2)
+                old.stifled = True
 
     heard = info_mod.propagate_day(
         state.info, run_seed, day, block, people, intervals, hh_members, commit_heard
@@ -680,15 +731,32 @@ def run_simulation(
                 chosen = all_ids
             else:
                 focused = [h for h in state.attention.focused() if h in hh_by_id]
-                gated = [
-                    h for h in sorted(state.gate_marks)
-                    if h in hh_by_id and h not in focused
-                ]
+                # Gated households come in attention order, not alphabetically:
+                # when more are marked than the day can afford, the ones that
+                # survive should be the ones something happened to.
+                gated = state.attention.top_k(
+                    [h for h in state.gate_marks if h in hh_by_id and h not in focused],
+                    len(state.gate_marks), tick=day * 288, day=day,
+                )
                 fill = [
                     h for h in state.attention.top_k(all_ids, scenes_k, tick=day * 288, day=day)
                     if h not in gated and h not in focused
                 ]
-                chosen = (focused + gated + fill)[: max(scenes_k, len(focused) + len(gated))]
+                # A mass event should mean MORE scenes, not unbounded scenes.
+                # One power cut gate-marked 78 of 80 households and made a
+                # single day cost 67 scenes — thirteen normal days — with no
+                # ceiling anywhere in the pipeline.
+                budget = max(scenes_k, min(len(focused) + len(gated), scenes_k * GATE_BURST))
+                chosen = (focused + gated + fill)[:budget]
+                dropped = [h for h in gated if h not in chosen]
+                if dropped:
+                    log.commit([EventIn(
+                        type="scene.gate_capped", sim_time=day * SECONDS_PER_DAY,
+                        payload={"marked": len(gated), "rendered": len(chosen),
+                                 "dropped": dropped[:40], "budget": budget},
+                        provenance="system",
+                    )])
+                    total += 1
             results = run_morning_scenes(
                 log, gateway, state.canon, state.registry, block, households, people, day,
                 chosen_ids=chosen,
