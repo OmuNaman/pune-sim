@@ -1,0 +1,208 @@
+
+=== audit runs\soak\events.db ===
+branch 0 | seed 108 (unverified) | 80 households | 306 people | 30 days | 41,546 events
+
+FAIL  DUP-MEM                  11 exact consecutive-day duplicates (limit 0)
+FAIL  DUP-MSG                  9 exact consecutive-day duplicates (limit 0)
+FAIL  HAZARD-AMBULANCE         2 ambulances for non-casualty hazards (limit 0)
+FAIL  HAZARD-PERCEPT           1 of 5 hazards perceived by nobody (limit 0)
+FAIL  ID-CHILD-CORRESPONDENT   4 messages to an unnamed child outside the household (limit 0)
+FAIL  ID-INVENTED-REF          7 references to people who do not exist (limit 0)
+FAIL  PRESSURE-CLASS           1 occupation classes with >50% financially crossed (limit 0)
+FAIL  PRESSURE-REFIRE          1 (person, dimension) pairs crossed 3+ times (limit 0)
+FAIL  SELF-ECHO                20 texts a household reproduced verbatim later (limit 0)
+FAIL  SPOTLIGHT-STREAK         longest consecutive-day streak 15 (limit 10)
+WARN  ACTIVITY-VOCAB           341 free-text activities (267 distinct); 32 look like an absence but are counted as worked
+WARN  DUP-MEM-NEAR             1 near-duplicates (>0.9 similar)
+WARN  DUP-MSG-NEAR             1 near-duplicates (>0.9 similar)
+WARN  ID-HONORIFIC             14 honorific-addressed names outside the roster (heuristic)
+WARN  INFO-WITNESS-HEARSAY     117 hearsay retellings reached a witness of the same event
+WARN  PRESSURE-REFIRE-TWICE    13 pairs crossed exactly twice
+WARN  SCENE-SKIP-RATE          3/161 scenes skipped (1.9%; warn >1%, fail >10%)
+WARN  SPOTLIGHT-COVERAGE       27/80 households on camera at least once (157 slots spent; ceiling 80)
+WARN  SPOTLIGHT-VARIETY        5 distinct households in the last 10 days (want >= 8)
+WARN  TALK-COVERAGE            0 cross-household exchanges on 0 of 30 days, 0 distinct pairs
+WARN  TEMPORAL-DRIFT           11 scenes said 'yesterday' about something older (heuristic)
+SKIP  INFO-ECHO                this log predates lineage on info.heard — cannot check
+PASS  COST                     $0.0025/sim-day over 30 days (limit $1.00)
+PASS  DEBT-SPIRAL              0 loans taken, 0 interest accruals; 0 spiralling
+PASS  HAZARD-CONDITION         0 hazards with victims but no condition (limit 0)
+PASS  ID-REJECTED              0 scenes had an invented id dropped at the gate
+PASS  ID-SPEAKER-ROSTER        0 transcript speakers labelled with an id (limit 0)
+PASS  PROMPT-COVERAGE          0 event types render as nothing in a scene prompt
+PASS  RUMOR-IMMORTAL           0 claims still alive in the last 3 days (limit 0)
+PASS  RUMOR-SATURATION         0 claims past 90% of the block (limit 0)
+PASS  SCENE-EVERY-DAY          0 days rendered no morning scene at all
+
+--- detail ---
+
+[FAIL] DUP-MEM
+    person:000.0 d3->d4 seq4470==5830: dismissed the blame on chavhan shriram mandir as gossip, no official c
+    person:000.1 d3->d4 seq4469==5829: heard from shobha tai that fire at school is being blamed on chavhan s
+    person:000.2 d3->d4 seq4471==5831: still scared about school fire, asked if school will be closed.
+    person:000.3 d3->d4 seq4472==5832: reminded that it's sunday, but worried about the fire.
+    person:000.4 d3->d4 seq4473==5833: expressed fear about going to school and asked about mother's safety.
+    person:008.0 d19->d20 seq26855==28190: vikram notices vandana is stressed about rent but avoids discussing it
+    person:008.1 d19->d20 seq26856==28191: vandana brings up financial worry about upcoming rent; vikram dismisse
+    person:008.2 d19->d20 seq26857==28192: mahesh cannot find his water bottle and asks aai for help; he remember
+    person:034.0 d7->d8 seq10209==11869: financial worry persists; omkar is silent and distracted during mornin
+    person:073.2 d20->d21 seq28213==29556: shreyas's mention of the palus bhajya bhavan reopening gives vinayak a
+    person:073.3 d20->d21 seq28214==29557: sunita notices vinayak's distracted 'hmm' and deliberately asks if he 
+
+[FAIL] DUP-MSG
+    ('person:000.1', ('person:022.4',)) d3->d4 seq4479==5839: ho, mala kal sangitla. pan aata official kahi nahiye. ho, ho... chavha
+    ('person:000.1', ('person:022.4',)) d5->d6 seq7205==8852: ho, school la agni lagli, pan aaj official kahi nahi. aapan samorun ja
+    ('person:001.1', ('person:001.0',)) d15->d16 seq21422==22876: city post la power nahiye, tula office la jayla dusra marg ghyava lage
+    ('person:008.1', ('person:008.0',)) d19->d20 seq26861==28196: rent chi date javal aahe, ani mala khup tension aahe.
+    ('person:019.0', ('person:019.1',)) d7->d8 seq10201==11840: bus ne jaato. cycle nahi, khup traffic ahe.
+    ('person:019.1', ('person:019.0',)) d7->d8 seq10202==11841: bara. kharach savghat ahe. pan aapan kasa chalnar?
+    ('person:030.1', ('person:030.0',)) d6->d7 seq8828==10239: ho, pan aapan kay karu shakto? financial worry ne mala ratri zop yet n
+    ('person:073.2', ('person:073.3',)) d16->d17 seq22854==24178: loan ki kist aayi hai. aur kaam bhi kam mil raha hai. kya karun?
+    ('person:078.2', ('person:078.1',)) d19->d20 seq26892==28223: mi sana la phone karaychay lunch madhe. gift dyaychi vyavastha karaych
+
+[FAIL] HAZARD-AMBULANCE
+    seq13316 d9 hazard.water.supply_cut: 1 ambulance(s)
+    seq20139 d14 hazard.power.outage: 1 ambulance(s)
+
+[FAIL] HAZARD-PERCEPT
+    seq13316 d9 hazard.water.supply_cut: nobody perceived it
+    d01 hazard.fire.small sev=0.31 percepts=116 amb=1 cond=0 hurt=0
+    d05 hazard.road.collision sev=0.55 percepts=78 amb=1 cond=1 hurt=1
+    d07 hazard.road.collision sev=0.73 percepts=133 amb=1 cond=1 hurt=1
+    d09 hazard.water.supply_cut sev=0.35 percepts=0 amb=1 cond=0 hurt=0
+    d14 hazard.power.outage sev=0.5 percepts=13 amb=1 cond=0 hurt=0
+
+[FAIL] ID-CHILD-CORRESPONDENT
+    seq4479 d3: Sachin Shelar (6) never named in the scene
+    seq5839 d4: Sachin Shelar (6) never named in the scene
+    seq7205 d5: Sachin Shelar (6) never named in the scene
+    seq8852 d6: Sachin Shelar (6) never named in the scene
+
+[FAIL] ID-INVENTED-REF
+    seq43 d0: colleague_yogita
+    seq3097 d2: person:001.1_neighbour_phone
+    seq4489 d3: person:001.1_class_teacher_phone
+    seq20127 d14: Makarand Kale
+    seq20127 d14: Vinayak Mane
+    seq24169 d17: neighbor
+    seq30863 d22: Didi
+
+[FAIL] PRESSURE-CLASS
+    domestic_worker: 100% of 13 crossed p_financial
+
+[FAIL] PRESSURE-REFIRE
+    person:008.1 p_financial: 3 crossings
+
+[FAIL] SELF-ECHO
+    hh:000 seq4469==5829: heard from shobha tai that fire at school is being blamed on chavhan s
+    hh:000 seq4470==5830: dismissed the blame on chavhan shriram mandir as gossip, no official c
+    hh:000 seq4471==5831: still scared about school fire, asked if school will be closed.
+    hh:000 seq4472==5832: reminded that it's sunday, but worried about the fire.
+    hh:000 seq4473==5833: expressed fear about going to school and asked about mother's safety.
+    hh:000 seq4479==5839: ho, mala kal sangitla. pan aata official kahi nahiye. ho, ho... chavha
+    hh:000 seq7205==8852: ho, school la agni lagli, pan aaj official kahi nahi. aapan samorun ja
+    hh:001 seq21422==22876: city post la power nahiye, tula office la jayla dusra marg ghyava lage
+    hh:008 seq26855==28190: vikram notices vandana is stressed about rent but avoids discussing it
+    hh:008 seq26856==28191: vandana brings up financial worry about upcoming rent; vikram dismisse
+    hh:008 seq26857==28192: mahesh cannot find his water bottle and asks aai for help; he remember
+    hh:008 seq26861==28196: rent chi date javal aahe, ani mala khup tension aahe.
+    ... and 8 more
+
+[FAIL] SPOTLIGHT-STREAK
+    hh:008: 15 days running
+    hh:073: 15 days running
+    hh:078: 15 days running
+    hh:068: 13 days running
+    hh:069: 11 days running
+
+[WARN] ACTIVITY-VOCAB
+    Leaves home early for office via alternate route
+    Republic Day celebration at school (if held) or stay home
+    Return home
+    Return home for dinner
+    Return home for lunch break
+    at home with father
+    back home
+    close shop and return home
+    domestic work at home
+    leave home
+    play or study at home
+    read newspaper and rest
+    ... and 8 more
+
+[WARN] DUP-MEM-NEAR
+    person:030.0 d16->d17 seq22864~24205: sachin made chai and asked about ujwala's shop timings on sunday.
+
+[WARN] DUP-MSG-NEAR
+    ('person:030.0', ('person:030.1',)) d6->d7 seq8827~10238: kalcha accident khara ahe, mala vatatay 75%.
+
+[WARN] ID-HONORIFIC
+    seq4468 d3: 'Shobha tai' matches nobody
+    seq5828 d4: 'Shobha tai' matches nobody
+    seq5828 d4: 'Shobha tai' matches nobody
+    seq8807 d6: 'Shobha tai' matches nobody
+    seq13270 d9: 'Anant dada' is a minor's name
+    seq13280 d9: 'Shubhangi tai' is a minor's name
+    seq16022 d11: 'Shobha tai' matches nobody
+    seq17379 d12: 'Sudha tai' matches nobody
+    seq17387 d12: 'Shobha tai' matches nobody
+    seq17387 d12: 'Shobha tai' matches nobody
+    seq18803 d13: 'Shobha tai' matches nobody
+    seq18803 d13: 'Shobha tai' matches nobody
+    ... and 2 more
+
+[WARN] INFO-WITNESS-HEARSAY
+    seq2805 d1: person:039.3 told a different story than they saw
+    seq2808 d1: person:012.1 told a different story than they saw
+    seq2809 d1: person:012.1 told a different story than they saw
+    seq2810 d1: person:024.1 told a different story than they saw
+    seq2828 d1: person:003.2 told a different story than they saw
+    seq2868 d1: person:027.3 told a different story than they saw
+    seq2869 d1: person:022.4 told a different story than they saw
+    seq2871 d1: person:059.4 told a different story than they saw
+    seq2875 d1: person:027.2 told a different story than they saw
+    seq2884 d1: person:027.4 told a different story than they saw
+    seq2897 d1: person:075.2 told a different story than they saw
+    seq2899 d1: person:075.0 told a different story than they saw
+    ... and 3 more
+
+[WARN] PRESSURE-REFIRE-TWICE
+    person:019.0 p_financial
+    person:019.1 p_financial
+    person:025.0 p_financial
+    person:030.0 p_financial
+    person:032.1 p_financial
+    person:034.0 p_financial
+    person:034.1 p_financial
+    person:037.0 p_financial
+    person:059.1 p_financial
+    person:069.1 p_financial
+    person:073.2 p_financial
+    person:078.0 p_financial
+    ... and 1 more
+
+[WARN] SCENE-SKIP-RATE
+    seq11323 d7 hh:070: SchemaError: failed after repair: no JSON object in output  <- ON A HAZARD DAY
+    seq14678 d10 hh:037: SchemaError: failed after repair: no JSON object in output
+    seq25554 d18 hh:030: SchemaError: failed after repair: no JSON object in output
+
+[WARN] SPOTLIGHT-COVERAGE
+    never rendered: hh:005, hh:007, hh:009, hh:011, hh:012, hh:017, hh:018, hh:020, hh:021, hh:022, hh:023, hh:024, hh:026, hh:027, hh:028, hh:029, hh:031, hh:033, hh:036, hh:038, hh:039, hh:040, hh:041, hh:042, hh:043
+
+[WARN] TALK-COVERAGE
+    nobody spoke to anyone outside their own household all run
+
+[WARN] TEMPORAL-DRIFT
+    seq3074 d2: says 'yesterday' about a collision nobody heard of
+    seq5828 d4: 'yesterday' for a fire last heard d2 (2 days stale)
+    seq8844 d6: 'yesterday' for a fire last heard d2 (4 days stale)
+    seq10233 d7: 'yesterday' for a collision last heard d5 (2 days stale)
+    seq10233 d7: says 'yesterday' about a outage nobody heard of
+    seq13256 d9: 'yesterday' for a collision last heard d7 (2 days stale)
+    seq16032 d11: 'yesterday' for a collision last heard d7 (4 days stale)
+    seq18754 d13: says 'yesterday' about a supply_cut nobody heard of
+    seq21452 d15: says 'yesterday' about a supply_cut nobody heard of
+    seq24185 d17: 'yesterday' for a outage last heard d15 (2 days stale)
+    seq25538 d18: 'yesterday' for a outage last heard d15 (3 days stale)
+
+31 probes: 9 pass, 11 warn, 10 fail, 1 skip

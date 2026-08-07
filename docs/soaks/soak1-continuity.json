@@ -1,0 +1,27 @@
+{
+  "household": "hh:000",
+  "db": "runs\\soak\\events.db",
+  "scenes": 7,
+  "findings": [
+    {
+      "kind": "EVENT-TIME",
+      "severity": "major",
+      "day": 3,
+      "quote": "Kal school la hoto, pan fire raatri la lagla.",
+      "canon": "day 1 Fri 02 Jan 14:10 — Madhura Chavan was present: \"A fire broke out at Ratanben Chunilal Mehta (RCM) Gujarati High School\"",
+      "why": "The fire broke out at 14:10 (2:10 PM), not at night (raatri) as stated by Madhura, who was present and should know the correct time."
+    },
+    {
+      "kind": "STATE",
+      "severity": "major",
+      "day": 6,
+      "quote": "Dnyaneshwar and Aditya drag their feet over breakfast, still uneasy after yesterday's fire rumour.",
+      "canon": "day 1 Fri 02 Jan 14:10 — Madhura, Dnyaneshwar, Vaishali, Aditya were all present: 'A fire broke out at Ratanben Chunilal Mehta (RCM) Gujarati High School'",
+      "why": "The scene treats the fire as an unconfirmed rumour from yesterday, but all four family members personally witnessed the actual fire on day 1."
+    }
+  ],
+  "notes": [
+    "The family's overall coherence is strong except for Madhura misstating the time of the fire in the day 3 scene, a direct contradiction of the canon event time.",
+    "The family's shared memory of the school fire is lost; they discuss it as hearsay days after it happened, undermining a key canon event."
+  ]
+}
