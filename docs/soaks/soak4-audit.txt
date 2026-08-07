@@ -1,0 +1,95 @@
+
+=== audit runs\soak4\events.db ===
+branch 0 | seed 108 (corroborated by run.meta) | 80 households | 306 people | 30 days | 43,694 events
+
+WARN  ACTIVITY-VOCAB           224 free-text activities (165 distinct); 12 look like an absence but are counted as worked
+WARN  ID-HONORIFIC             9 honorific-addressed names outside the roster (heuristic)
+WARN  ID-REJECTED              2 scenes had an invented id dropped at the gate
+WARN  INFO-WITNESS-HEARSAY     38 hearsay retellings reached a witness of the same event
+WARN  PROMPT-COVERAGE          1 event types render as nothing in a scene prompt
+WARN  TEMPORAL-DRIFT           8 scenes said 'yesterday' about something older (heuristic)
+PASS  BELIEF-ACTION-SCALE      5 behaviour changes over 2 claims; 0 claim(s) moved more than a quarter of the block
+PASS  COST                     $0.0029/sim-day over 30 days (limit $1.00)
+PASS  DEBT-SPIRAL              0 loans taken, 0 interest accruals; 0 spiralling
+PASS  DUP-MEM                  0 exact consecutive-day duplicates (limit 0)
+PASS  DUP-MSG                  0 exact consecutive-day duplicates (limit 0)
+PASS  HAZARD-AMBULANCE         0 ambulances for non-casualty hazards (limit 0)
+PASS  HAZARD-CONDITION         0 hazards with victims but no condition (limit 0)
+PASS  HAZARD-PERCEPT           0 of 5 hazards perceived by nobody (limit 0)
+PASS  ID-CHILD-CORRESPONDENT   0 messages to an unnamed child outside the household (limit 0)
+PASS  ID-INVENTED-REF          0 references to people who do not exist (limit 0)
+PASS  ID-SPEAKER-ROSTER        0 transcript speakers labelled with an id (limit 0)
+PASS  INFO-ECHO                0 of 1443 hearings came back to their own teller (limit 0)
+PASS  MEMORY-RELATIVE-TIME     0 memories still carry a relative time word
+PASS  PRESSURE-CLASS           0 occupation classes with >50% financially crossed (limit 0)
+PASS  PRESSURE-REFIRE          0 (person, dimension) pairs crossed 3+ times (limit 0)
+PASS  RUMOR-IMMORTAL           0 claims still alive in the last 3 days (limit 0)
+PASS  RUMOR-SATURATION         0 claims past 90% of the block (limit 0)
+PASS  SCENE-EVERY-DAY          0 days rendered no morning scene at all
+PASS  SCENE-SKIP-RATE          0/151 scenes skipped (0.0%; warn >1%, fail >10%)
+PASS  SELF-ECHO                0 texts a person's later scene reproduced verbatim (limit 0)
+PASS  SPOTLIGHT-COVERAGE       80/80 households on camera at least once (150 slots spent; ceiling 80)
+PASS  SPOTLIGHT-STREAK         longest streak among UNFOLLOWED households 1 (limit 10); 1 pinned by --follow and exempt
+PASS  SPOTLIGHT-VARIETY        41 distinct households in the last 10 days (want >= 8)
+PASS  TALK-COVERAGE            12 cross-household exchanges on 12 of 30 days, 12 distinct pairs
+
+--- detail ---
+
+[WARN] ACTIVITY-VOCAB
+    Get ready for hospital shift
+    Hospital shift starts
+    Return home, prepare kadhi for lunch
+    Return home, relax
+    rest or read indoors
+    return home
+    return home for lunch
+    return to home base for morning passengers
+    returns home via Kaka Fruits
+    stay home, meet friend later
+    stays with grandmother (not listed, but implied)
+    stays with mother until she leaves, then with neighbour
+
+[WARN] ID-HONORIFIC
+    seq11674 d8: 'Revati tai' is a minor's name
+    seq11691 d8: 'Shubhangi tai' is a minor's name
+    seq14762 d10: 'Ujwala tai' is a minor's name
+    seq14762 d10: 'Shubhangi tai' is a minor's name
+    seq17747 d12: 'Sunita tai' is a minor's name
+    seq24012 d16: 'Sadanand kaka' is a minor's name
+    seq28236 d19: 'Madhura tai' is a minor's name
+    seq32469 d22: 'Shubhangi tai' is a minor's name
+    seq40904 d28: 'Shubhangi didi' is a minor's name
+
+[WARN] ID-REJECTED
+    seq8056 d5 hh:002: ['way/160919295', 'way/281844137']
+    seq10219 d7 hh:000: ['Ravi (fellow driver, not in household)']
+
+[WARN] INFO-WITNESS-HEARSAY
+    seq2827 d1: person:023.1 told a different story than they saw
+    seq2836 d1: person:023.1 told a different story than they saw
+    seq8600 d5: person:020.0 told a different story than they saw
+    seq8608 d5: person:002.2 told a different story than they saw
+    seq8664 d5: person:015.3 told a different story than they saw
+    seq8686 d5: person:020.0 told a different story than they saw
+    seq8688 d5: person:020.3 told a different story than they saw
+    seq10162 d6: person:013.2 told a different story than they saw
+    seq10198 d6: person:033.0 told a different story than they saw
+    seq10205 d6: person:013.2 told a different story than they saw
+    seq11617 d7: person:048.0 told a different story than they saw
+    seq11620 d7: person:039.0 told a different story than they saw
+    ... and 3 more
+
+[WARN] PROMPT-COVERAGE
+    run.meta
+
+[WARN] TEMPORAL-DRIFT
+    seq14769 d10: 'yesterday' for a fire last heard d2 (8 days stale)
+    seq14785 d10: 'yesterday' for a collision last heard d8 (2 days stale)
+    seq22480 d15: 'yesterday' for a supply_cut last heard d9 (6 days stale)
+    seq22486 d15: 'yesterday' for a supply_cut last heard d9 (6 days stale)
+    seq22500 d15: 'yesterday' for a collision last heard d9 (6 days stale)
+    seq24012 d16: 'yesterday' for a outage last heard d14 (2 days stale)
+    seq25400 d17: 'yesterday' for a outage last heard d14 (3 days stale)
+    seq33892 d23: 'yesterday' for a supply_cut last heard d9 (14 days stale)
+
+30 probes: 24 pass, 6 warn, 0 fail, 0 skip

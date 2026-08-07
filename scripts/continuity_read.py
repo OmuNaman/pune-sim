@@ -58,6 +58,12 @@ passing without an id), ordinary routine repetition (chai every morning is not a
 or anything you cannot tie to a specific canon line. A family that argues about the same rumour
 on two days is normal; a family that re-lives the same incident is not.
 
+CANON BEING SILENT IS NOT A CONTRADICTION. Only a canon line that says OTHERWISE is one. If two
+siblings are both ten, "the twins" is a reasonable reading, not an error; if canon does not say
+what someone ate, anything they ate is fine. Report what canon RULES OUT, never what it merely
+fails to mention. Times in canon are exact to the minute — round them as a person would ("9:30",
+"around midnight") without calling that a contradiction.
+
 Every finding MUST cite the scene day and the canon line it contradicts. If you cannot cite,
 do not report it. Being thorough matters, but a false positive is worse than a miss here —
 this is a pass/fail gate on the simulation's core promise."""
@@ -116,7 +122,7 @@ def build_canon(log: EventLog, hh, people, block, until_day: int | None = None) 
         who = people[p["person"]].name
         when = to_datetime(e.sim_time)
         lines.append(
-            f"  day {e.sim_time // SECONDS_PER_DAY} {when:%a %d %b %H:%M} — {who} was present:"
+            f"  {when:%a %d %b %Y, %H:%M} — {who} was present:"
             f" \"{p.get('claim', {}).get('text', '')}\""
         )
         seen = True
@@ -144,7 +150,7 @@ def build_canon(log: EventLog, hh, people, block, until_day: int | None = None) 
             continue
         line = _humanize(e.type, p, block, people)
         if line:
-            lines.append(f"  day {e.sim_time // SECONDS_PER_DAY} {to_datetime(e.sim_time):%a %H:%M} — {line}")
+            lines.append(f"  {to_datetime(e.sim_time):%a %d %b %Y, %H:%M} — {line}")
             facts += 1
     if not facts:
         lines.append("  (nothing institutional touched them)")

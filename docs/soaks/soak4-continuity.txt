@@ -1,0 +1,22 @@
+
+=== continuity read: hh:000 (Chavan family), runs\soak4\events.db ===
+30 scenes over days 0-29, judged by deepseek/deepseek-v4-pro in 5 batches
+
+VERDICT: FAIL — 1 contradictions (1 major)
+
+  [major] EVENT-TIME day 28
+      scene : Kalcha experience purta.
+      canon : Thu 15 Jan 2026, 23:56 — Aditya Chavan was present: 'The power is back around Nilkantheshwar'
+      why   : Aditya refers to Wednesday 28 Jan as 'yesterday's notebook mishap,' but the notebook was left in the classroom on Tuesday 27 Jan, not Wednesday 28 Jan
+
+  note: The Chavan family's morning routines are consistent with the canon roster; minor daily variations in squabbles and items misplaced do not contradict any canonical facts, and the household's coherence holds across six days.
+
+  note: The Chavan family's morning routines and rumor discussions across days 6–11 are consistent with the canon roster and contain no contradictions of event time, identity, repetition, or state.
+
+  note: The Chavan family's morning routines are consistent across the week, and their recollections of the Thursday night power outage (rounded to 9:30 PM and midnight) align reasonably with the canon's exact times.
+
+  note: The Chavan family's morning routines across days 18–23 are consistent with the canon. No event times, identities, repeated incidents, or state contradictions were found; the scenes depict ordinary school-day preparations that align with the roster and the single power-outage event recorded on 15 Jan.
+
+  note: The family's routines and relationships are coherent, but a single date mismatch in Aditya's memory of the notebook incident breaks temporal continuity.
+
+written: docs\soaks\soak4-continuity.json

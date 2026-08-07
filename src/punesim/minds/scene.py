@@ -120,6 +120,9 @@ _RELATIVE_TIME = (
     (re.compile(r"\blast night\b", re.IGNORECASE), "on {prev} night"),
     (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
     (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
+    # possessive before bare, or "last week's workbook" reads
+    # "in the week before Tue 06 Jan's workbook"
+    (re.compile(r"\blast week'?s\b", re.IGNORECASE), "the earlier week's"),
     (re.compile(r"\blast week\b", re.IGNORECASE), "in the week before {today}"),
     (re.compile(r"\btomorrow'?s\b", re.IGNORECASE), "{next}'s"),
     (re.compile(r"\btomorrow\b", re.IGNORECASE), "on {next}"),

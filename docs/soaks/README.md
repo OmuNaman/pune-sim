@@ -7,7 +7,8 @@ including the ones that failed, which are the useful ones.
 |---|---|---|
 | [soak1](soak1-first-30-days.md) — the first 30 days | 10 FAIL | FAIL: 4 contradictions |
 | [soak2](soak2-after-the-fixes.md) — after the fixes | **0 FAIL** | FAIL: 9 contradictions, all of two mechanisms |
-| soak3 — after the memory-time fix | running | running |
+| [soak3](soak3-audit.txt) — after the memory-time fix | 1 FAIL (network) | FAIL: 6 findings, all one cause |
+| [soak4](soak4-everything-in.md) — everything in | **0 FAIL** | FAIL: **1** finding, minor and mis-cited |
 
 The gate is two commands, and both are in the repo so any run can be judged the
 same way:
