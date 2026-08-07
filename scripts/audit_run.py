@@ -105,6 +105,7 @@ class Audit:
     def __init__(
         self, events: list[Event], people: dict, households: list, n_days: int,
         *, partial_last_day: bool = False, followed: set[str] | None = None,
+        windowed_tail: bool = False,
     ):
         self.events = events
         self.people = people
@@ -124,6 +125,12 @@ class Audit:
         # consequence?" would fail on a consequence that is merely not yet due.
         self.last_day = max((e.day for e in events), default=0)
         self.partial_last_day = partial_last_day
+        # A window that stops before the run does has no "end of the run" to
+        # reason about. A claim still spreading on the last day of a 5-day slice
+        # of a 30-day run is not immortal, it is simply mid-life — the first
+        # windowed audit of a 30-day soak reported exactly that as a FAIL, and
+        # the window covering the actual end showed the claim dying on time.
+        self.windowed_tail = windowed_tail
         self.followed = set(followed or ())
 
     # -- helpers ---------------------------------------------------------- #
@@ -537,6 +544,11 @@ class Audit:
                 immortal.append(f"{key}: born d{days[0]}, still spreading on d{days[-1]} of {last_day}")
             if people_n > 0.9 * len(self.people):
                 saturated.append(f"{key}: reached {people_n}/{len(self.people)}")
+        if self.windowed_tail and immortal:
+            self.add("RUMOR-IMMORTAL", "SKIP",
+                     "this window ends before the run does, so a claim still alive at its "
+                     "edge says nothing — re-run over the window that covers the last day")
+            immortal = []
         self.add("RUMOR-IMMORTAL", "FAIL" if immortal else "PASS",
                  f"{len(immortal)} claims still alive in the last 3 days (limit 0)", immortal + rows)
         self.add("RUMOR-SATURATION", "FAIL" if saturated else "PASS",
@@ -712,7 +724,11 @@ class Audit:
             t
             for t in self.types
             if t not in _SELF_OUTPUT_TYPES
-            and t not in ("trip.start", "trip.end", "activity.start", "llm.response")
+            # run.meta is the log describing itself to a *reader*, not
+            # something that happened to anybody; it has no business in a
+            # prompt and its absence there is the correct outcome, not a gap.
+            and t not in ("trip.start", "trip.end", "activity.start", "llm.response",
+                          "run.meta", "scene.gate_capped")
             and not _humanize(t, self.by_type[t][0].payload, block_stub, self.people)
         )
         self.add(
@@ -784,6 +800,19 @@ def load(db: Path, branch: int, since_day: int | None = None,
                     "and run more than one window if you need the whole run."
                 )
         rows = con.execute(q + " ORDER BY seq", args).fetchall()
+        # run.meta sits at sim_time 0, so any window that does not start at day
+        # 0 drops the log's own description of itself — and then the roster
+        # check has nothing to check against, the block silently falls back to
+        # the default, and the audit regenerates a *different population* and
+        # passes every probe on it. That happened on the first windowed run of
+        # a 12k oldcity soak: it reported 46,671 kasba people against a log of
+        # 49,578 oldcity ones. The log's identity is never outside the window.
+        if since_day:
+            meta = con.execute(
+                "SELECT seq, sim_time, type, payload, caused_by, provenance FROM event "
+                "WHERE branch_id = ? AND type = 'run.meta' ORDER BY seq", (branch,)
+            ).fetchall()
+            rows = [r for r in meta if r[0] not in {x[0] for x in rows}] + rows
     finally:
         con.close()
     return [Event(r[0], r[1], r[2], orjson.loads(r[3]), r[4], r[5]) for r in rows]
@@ -838,6 +867,10 @@ def main() -> int:
     followed: set[str] = set(args.follow or [])
     meta = [e for e in events if e.type == "run.meta"]
     corroborated = False
+    if not meta:
+        print("audit: this log has no run.meta — the roster cannot be corroborated, so "
+              "every identity probe is guesswork. Re-run the sim once on this version.",
+              file=sys.stderr)
     if meta:
         m = meta[0].payload
         block_name = m.get("block", "kasba")
@@ -862,7 +895,13 @@ def main() -> int:
         return 2
 
     n_days = max(e.day for e in events) - min(e.day for e in events) + 1
+    # Does this window reach the run's actual end? run.meta carries the day
+    # count the run was launched with.
+    planned_days = int((meta[0].payload.get("days") if meta else 0) or 0)
+    windowed_tail = bool(args.until_day is not None and planned_days
+                         and args.until_day < planned_days - 1)
     audit = Audit(events, people, hhs, n_days, partial_last_day=args.live,
+                  windowed_tail=windowed_tail,
                   followed=followed)
     audit.run()
 
@@ -871,7 +910,8 @@ def main() -> int:
     print(f"\n=== audit {args.db} ===")
     print(
         f"branch {args.branch} | seed {seed}{' (corroborated by run.meta)' if corroborated else ' (unverified)'}"
-        f" | {households} households | {len(people)} people | {n_days} days | {len(events):,} events\n"
+        f" | block {block_name} | {households} households | {len(people)} people"
+        f" | {n_days} days | {len(events):,} events\n"
     )
     if audit.partial_last_day:
         print(

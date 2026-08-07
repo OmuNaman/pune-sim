@@ -275,6 +275,16 @@ class Holding:
 @dataclass
 class InfoState:
     holdings: dict[str, dict[str, Holding]] = field(default_factory=dict)  # person -> claim_key -> Holding
+    # The day each claim family was first held by anyone. Freshness decays on
+    # THIS, not on when the current teller happened to hear it: a fortnight-old
+    # restoration is stale news to a man who heard it an hour ago. Keying decay
+    # to the teller instead let every new hearer restart the clock, so in a big
+    # enough population a claim never aged out — it kept recruiting eager
+    # relayers faster than saturation could stifle them. A 30-day soak at 49,578
+    # people had "the power is back" still spreading 16 days later, to 40% of
+    # the city. At 306 people it died in eight, which is why no earlier soak saw
+    # it: the bug is invisible until the population outruns saturation.
+    born: dict[str, int] = field(default_factory=dict)  # claim_key -> day
 
     def hear(
         self, person_id: str, claim: Claim, credence: float, day: int, seq: int,
@@ -282,6 +292,8 @@ class InfoState:
         lineage: tuple[str, ...] = (),
     ) -> None:
         by_key = self.holdings.setdefault(person_id, {})
+        if claim.key not in self.born:
+            self.born[claim.key] = day
         h = by_key.get(claim.key)
         if h is None:
             by_key[claim.key] = Holding(
@@ -458,7 +470,8 @@ def _try_share(
             # they were the fastest route to false certainty. Placed AFTER the
             # stifle draw so Maki-Thompson death dynamics are untouched.
             continue
-        fresh = math.exp(-max(0, day - h.first_day) / FRESHNESS_TAU_DAYS)
+        born = state.born.get(h.claim.key, h.first_day)
+        fresh = math.exp(-max(0, day - born) / FRESHNESS_TAU_DAYS)
         tr = traits(run_seed, sharer)
         base = 0.9 if channel == "household" else P_SHARE_BASE * (0.4 + 0.6 * tr.sociability)
         p = base * (0.3 + 0.7 * h.claim.charge) * fresh * h.credence
