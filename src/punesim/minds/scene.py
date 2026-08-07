@@ -119,6 +119,7 @@ _RELATIVE_TIME = (
     (re.compile(r"\blast night\b", re.IGNORECASE), "on {prev} night"),
     (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
     (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
+    (re.compile(r"\blast week\b", re.IGNORECASE), "in the week before {today}"),
     (re.compile(r"\btonight\b", re.IGNORECASE), "on {today} night"),
     (re.compile(r"\bthis morning\b", re.IGNORECASE), "on {today} morning"),
     (re.compile(r"\btoday\b", re.IGNORECASE), "on {today}"),
