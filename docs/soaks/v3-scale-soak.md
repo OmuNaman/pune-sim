@@ -114,6 +114,21 @@ differing hearsay version, those who went on to tell someone **retold their own
 account 120 times and the hearsay version zero times**. The V1.1 rule holds at
 49,578 people.
 
+## Soaked again, once people walked on streets
+
+V3 step 3 replaced haversine × 1.4 with shortest paths along the pinned OSM
+ways. That changes every journey time, so it changes who is in a room together,
+so it changes everything the info lane does — which is exactly the kind of
+change that has to be re-soaked rather than reasoned about.
+
+30 days, same 12,000 households and 49,578 people, 6,831,799 events, 46 minutes
+(92 s/sim-day against 76 unrouted — the graph costs about a third more, and
+`walk_seconds` is cached so a pair is routed once per run, not once per day).
+
+Audited in the same four windows: **0 FAIL**, and the same two
+`INFO-WITNESS-HEARSAY` warns, which are opportunities rather than corruption.
+Nothing the routing changed broke anything the earlier soak had settled.
+
 ## Standing observations, not defects
 
 - **Four hazards in 30 days** across 49,578 people. `hazards.CLASSES` gives each
