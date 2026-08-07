@@ -1,0 +1,54 @@
+
+=== continuity read: hh:000 (Chavan family), runs\soak2\events.db ===
+30 scenes over days 0-29, judged by deepseek/deepseek-v4-pro in 5 batches
+
+VERDICT: FAIL — 9 contradictions (6 major)
+
+  [major] EVENT-TIME day 18
+      scene : Kal raatri light aali. Nilkantheshwar side purna nikali.
+      canon : day 14 Thu 15 Jan 21:29 — Suhas Chavan was present: 'Power has gone out around Nilkantheshwar'
+      why   : Suhas says the power came back 'last night' (Sunday 18 Jan), but the canon only records a power outage on day 14 (Thursday 15 Jan) with no restoration
+  [major] EVENT-TIME day 19
+      scene : Suhas: Hmm… kal raatla vijecho motha girav vatat hota, pan aata sagla theek aahe.
+      canon : day 14 Thu 15 Jan 21:29 — Suhas Chavan was present: 'Power has gone out around Nilkantheshwar'
+      why   : Suhas claims there was a major power fluctuation 'last night' (Monday 19 Jan), but the canon records the power outage only on day 14 (Thursday 15 Jan)
+  [major] REPEAT day 20
+      scene : Vaishali: Aditya, tuza eraser sapadla ka?
+      canon : day 18 scene — Aditya found his eraser under the table; day 19 scene — Vaishali checked on Aditya's eraser after yesterday's reminder
+      why   : Vaishali asks Aditya if he found his eraser on day 20, but this was already resolved on day 18 when Aditya found it, and confirmed again on day 19, ma
+  [major] REPEAT day 20
+      scene : Aditya: Ho, mi kalchya baget takla. Hya.
+      canon : day 18 scene — Aditya found his eraser under the table; day 19 scene — Aditya confirmed it is safe
+      why   : Aditya says he put the eraser in his bag 'yesterday' (day 19), but the eraser was already found on day 18 and its location was settled, making this a 
+  [major] REPEAT day 23
+      scene : Vaishali: Dnya, tyachya var naav nahi, tu bagh. Ani Aditya, tujhya eraser chi kai? Milala na?
+      canon : day 18 scene — Aditya found his eraser under the table; day 19 scene — Vaishali checked on Aditya's eraser after yesterday's reminder; day 20 scene — 
+      why   : Vaishali asks Aditya about his eraser again on day 23, but this was resolved on day 18 and re-confirmed on days 19 and 20, making it a repeated re-liv
+  [major] REPEAT day 29
+      scene : Dnyaneshwar and Aditya argue over a missing compass, and Vaishali mediates while packing her own bag.
+      canon : day 25 — Dnyaneshwar: 'Aditya, utth! Mala tujhya geometry box madhe compass thevaycha ahe.' / Madhura: 'Dnyaneshwar, tujha compass tujhya bag madhe aa
+      why   : The compass was confirmed in Dnyaneshwar's bag on day 25, found and packed on day 28, but on day 29 it is suddenly missing again and becomes a major a
+  [minor] STATE day 16
+      scene : Kal raatri candle light madhe homework kela, tevha kuthi padla asel.
+      canon : Only power outage recorded is day 14 Thu 15 Jan 21:29; no outage on day 15.
+      why   : Implies a power outage on night of day 15 (candlelight homework), but power was restored by day 15 morning and no additional outage is in the canon.
+  [minor] EVENT-TIME day 17
+      scene : Kalchi power outage?
+      canon : Power outage event is recorded on day 14 at 21:29.
+      why   : Character refers to the power outage as 'yesterday's' (day 16) when it actually occurred on day 14, misplacing the timeline.
+  [minor] STATE day 29
+      scene : Kalchya raatri rickshaw cha engine thoda aavaaz karat hota, baghu nakki.
+      canon : day 19 Tue 07:00 — Suhas Chavan (34, rickshaw_driver) [person:000.0] could not get to unknown today
+      why   : Canon records Suhas could not get to work on day 19 suggesting a possible rickshaw issue, but day 29 introduces a specific new engine noise on day 28 
+
+  note: All five scenes align with the roster and events; the household members, their ages, and school are correctly represented, and no action or memory contradicts the canon.
+
+  note: The Chavan family's morning routines are consistent with the roster and contain no contradictions to the canon. The recurring accident rumor is a normal topic of conversation, not a re-lived event.
+
+  note: The family mostly stays consistent, but two timeline slips — a candlelit homework night with no outage and a misplaced 'yesterday' — break the continuity of the single blackout event.
+
+  note: The Chavan family's timeline is incoherent: the power outage is retold with conflicting timing on days 18 and 19, and Aditya's eraser is repeatedly treated as a new problem on days 20 and 23 despite being resolved on day 18.
+
+  note: The compass argument on day 29 repeats an already-resolved issue from day 25, and a new rickshaw engine problem appears without canon precedent just before the final day.
+
+written: docs\soaks\soak2-continuity.json

@@ -6,7 +6,7 @@ including the ones that failed, which are the useful ones.
 | Run | Mechanical audit | Continuity on the followed family |
 |---|---|---|
 | [soak1](soak1-first-30-days.md) — the first 30 days | 10 FAIL | FAIL: 4 contradictions |
-| [soak2](soak2-after-the-fixes.md) — after the fixes | **0 FAIL** | FAIL: clean to day 11, one residual mechanism after |
+| [soak2](soak2-after-the-fixes.md) — after the fixes | **0 FAIL** | FAIL: 9 contradictions, all of two mechanisms |
 | soak3 — after the memory-time fix | running | running |
 
 The gate is two commands, and both are in the repo so any run can be judged the
