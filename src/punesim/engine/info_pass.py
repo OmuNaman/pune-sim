@@ -163,8 +163,9 @@ def _info_pass(
                 )
             ]
         )[0]
-        state.avoid.setdefault(act.person, {})[act.place] = (act.claim_key, seq)
-        if act.action == "store_water":
+        if act.action in info_mod.AVOIDING_ACTIONS:
+            state.avoid.setdefault(act.person, {})[act.place] = (act.claim_key, seq)
+        elif act.action == "store_water":
             state.morning_acts.setdefault(act.person, []).append(("store_water", act.claim_key, seq))
         hid = hh_of_person.get(act.person)
         if hid:

@@ -48,6 +48,15 @@ ACTION_THRESHOLDS: dict[str, tuple[str, float]] = {
 }
 DEFAULT_ACTION = ("avoid_place", 0.7)
 
+# Of the action vocabulary, which ones actually mean "and so I stop going
+# there". Storing water at home does not: it is a thing you do *because* the
+# supply is cut, not a reason to stay away from the place it was cut at. The
+# engine used to record an avoidance for every belief action regardless, so
+# 1,138 people who filled a drum were also marked as shunning the pumping
+# station — invisible in that run only because none of them ever went there,
+# and quietly the reason the belief lane cost 9 of every 20 seconds by day 15.
+AVOIDING_ACTIONS = frozenset({"avoid_place", "stop_patronage"})
+
 
 @dataclass(frozen=True)
 class Claim:
