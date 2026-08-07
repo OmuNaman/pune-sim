@@ -14,7 +14,6 @@ does the same for a db that is still being written by a live run.
 """
 
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 
 import orjson
@@ -25,21 +24,12 @@ from pydantic import BaseModel
 from ..kernel.log import EventLog
 from ..kernel.timebase import SECONDS_PER_DAY, to_datetime
 from ..population import synthesize
-from ..world.block import Block, load_for
+from ..world.block import load_for
+from .logview import LogView
 
 STATIC = Path(__file__).parent / "static"
 
 _ROUTINE = {"trip.start", "trip.end", "activity.start"}
-
-
-@dataclass
-class _Seg:
-    t0: int
-    t1: int  # exclusive; last segment open-ended
-    kind: str  # 'at' | 'transit'
-    a: str  # place id (at) or origin (transit)
-    b: str | None  # destination (transit)
-    activity: str | None
 
 
 def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
@@ -151,65 +141,6 @@ def _humanize(e, names: dict[str, str], places: dict[str, str]) -> str:
     return f"{t}: {orjson.dumps(p).decode()[:120]}"
 
 
-class _Snapshot:
-    """Everything derived from the log at one moment; rebuilt after writes."""
-
-    def __init__(self, db_path: str, block: Block, people: dict):
-        self.block = block
-        self.people = people
-        log = EventLog(db_path)
-        self.events = list(log.events())
-        self.det_hash = log.determinism_hash()
-        log.close()
-
-        self.segs: dict[str, list[_Seg]] = {pid: [] for pid in people}
-        cur: dict[str, tuple[str, str | None]] = {pid: (p.home_id, None) for pid, p in people.items()}
-        open_t: dict[str, int] = dict.fromkeys(people, 0)
-        self.max_t = 0
-        for e in self.events:
-            self.max_t = max(self.max_t, e.sim_time)
-            pid = e.payload.get("person")
-            if pid not in self.segs or e.type not in _ROUTINE:
-                continue
-            if e.type == "trip.start":
-                at, act = cur[pid]
-                self.segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
-                cur[pid] = (e.payload["to"], e.payload.get("purpose"))
-                self.segs[pid].append(_Seg(e.sim_time, -1, "transit", e.payload["from"], e.payload["to"], e.payload.get("purpose")))
-                open_t[pid] = e.sim_time
-            elif e.type == "trip.end":
-                if self.segs[pid] and self.segs[pid][-1].kind == "transit" and self.segs[pid][-1].t1 == -1:
-                    self.segs[pid][-1].t1 = e.sim_time
-                cur[pid] = (e.payload["at"], cur[pid][1])
-                open_t[pid] = e.sim_time
-            elif e.type == "activity.start":
-                at, act = cur[pid]
-                if e.sim_time > open_t[pid]:  # close the labelled span so activities never bleed backward
-                    self.segs[pid].append(_Seg(open_t[pid], e.sim_time, "at", at, None, act))
-                    open_t[pid] = e.sim_time
-                cur[pid] = (e.payload.get("at", at), e.payload.get("activity"))
-        for pid, (at, act) in cur.items():
-            self.segs[pid].append(_Seg(open_t[pid], self.max_t + SECONDS_PER_DAY, "at", at, None, act))
-
-    def pos(self, pid: str, t: int):
-        p = self.people[pid]
-        best = None
-        for s in self.segs[pid]:
-            if s.t0 <= t and (s.t1 == -1 or t < s.t1):
-                best = s
-        if best is None:
-            best = _Seg(0, 0, "at", p.home_id, None, None)
-        if best.kind == "at" or best.b is None:
-            pl = self.block.get(best.a)
-            return (pl.lat, pl.lon, "at", best.a, best.activity) if pl else None
-        a, b = self.block.get(best.a), self.block.get(best.b)
-        if not a or not b:
-            return None
-        frac = (t - best.t0) / max(1, (best.t1 if best.t1 > 0 else best.t0 + 600) - best.t0)
-        frac = min(max(frac, 0.0), 1.0)
-        return (a.lat + (b.lat - a.lat) * frac, a.lon + (b.lon - a.lon) * frac, "transit", best.b, best.activity)
-
-
 class InterviewBody(BaseModel):
     person_id: str
     question: str
@@ -230,7 +161,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
     person_names = {p.id: p.name for p in people.values()}
     hh_members = {h.id: list(h.member_ids) for h in households}
 
-    S = {"snap": _Snapshot(db_path, block, people)}
+    S = {"snap": LogView(db_path, block, people)}
     write_lock = threading.Lock()
 
     def _gateway(log=None):
@@ -249,10 +180,13 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
             "seed": seed,
             "people": len(people),
             "households": len(households),
-            "events": len(snap.events),
+            "events": snap.n_events,
             "days": snap.max_t // SECONDS_PER_DAY + 1,
             "max_t": snap.max_t,
-            "hash": snap.det_hash[:16],
+            # Folding the hash walks the whole log — two minutes on a 30-day
+            # V3 run — and the header line is not worth that on every load.
+            # The page asks /api/hash for it separately once it is up.
+            "hash": snap.cached_hash(),
             "llm": cfg is not None,
             "bounds": [[min(lats), min(lons)], [max(lats), max(lons)]],
         }
@@ -260,8 +194,13 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
     @app.post("/api/reload")
     def reload():
         with write_lock:
-            S["snap"] = _Snapshot(db_path, block, people)
+            S["snap"].refresh()
         return {"events": len(S["snap"].events)}
+
+    @app.get("/api/hash")
+    def det_hash():
+        """The log's determinism hash, folded on demand. Slow by nature."""
+        return {"hash": S["snap"].det_hash()}
 
     @app.get("/api/places")
     def places():
@@ -289,7 +228,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
         if p is None:
             return {"error": "unknown person"}
         memories, moods, lines, interviews, heard = [], [], [], [], []
-        for e in snap.events:
+        for e in snap.for_person(pid, (
+            "info.heard", "memory.formed", "mood.delta", "message.sent",
+            "interview.answered", "belief.action", "pressure.crossed",
+        ), limit=1_000_000):
             pl = e.payload
             if e.type == "info.heard" and pl.get("person") == pid:
                 c = pl.get("claim", {})
@@ -338,7 +280,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
     @app.get("/api/scenes")
     def scenes():
         out = []
-        for e in S["snap"].events:
+        for e in S["snap"].of_type("scene.morning", "scene.reaction", "conversation.held"):
             if e.type in ("scene.morning", "scene.reaction"):
                 hid = e.payload.get("household")
                 out.append({
@@ -368,13 +310,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
     @app.get("/api/ticker")
     def ticker():
         out = []
-        for e in S["snap"].events:
-            # info.heard is high-volume gossip — it lives in the Rumors tab
-            if e.type in _ROUTINE or e.type in (
-                "llm.response", "fact.established", "fact.superseded", "info.heard",
-                "run.meta",
-            ):
-                continue
+        for e in S["snap"].notable():
             out.append({
                 "seq": e.seq, "t": e.sim_time,
                 "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
@@ -391,9 +327,10 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
         """Claim families: origin, hop-by-hop drift, reach, believers, actions.
         The auditable telephone game — every number here folds from the log."""
         snap = S["snap"]
-        by_seq = {e.seq: e for e in snap.events}
+        hearings = snap.of_type("info.heard", "belief.action", limit=1_000_000)
+        by_seq = {e.seq: e for e in hearings}
         fams: dict[str, dict] = {}
-        for e in snap.events:
+        for e in hearings:
             if e.type == "info.heard":
                 pl = e.payload
                 c = pl.get("claim", {})
@@ -458,10 +395,20 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
         return out
 
     @app.get("/api/positions")
-    def positions(t: int):
+    def positions(t: int, limit: int = 4000, focus: str = ""):
+        """Where everyone is at one moment.
+
+        Capped, because a four-peth run has 49,578 people and a map cannot draw
+        them: uncapped this is 8.7 MB per scrub of the timeline. The sample is
+        the first `limit` people in id order — stable as you scrub, so dots do
+        not flicker in and out — and anyone named in `focus` is always included,
+        which is what following a family means.
+        """
         snap = S["snap"]
         out = []
-        for pid in people:
+        wanted = [p.strip() for p in focus.split(",") if p.strip()]
+        shown = list(dict.fromkeys([*wanted, *list(people)[:limit]]))
+        for pid in shown:
             r = snap.pos(pid, t)
             if r is None:
                 continue
@@ -471,7 +418,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
                 "state": state, "at": at, "at_name": place_names.get(at, ""),
                 "activity": activity or "",
             })
-        return out
+        return {"total": len(people), "shown": len(out), "people": out}
 
     @app.post("/api/interview")
     def interview_endpoint(body: InterviewBody):
@@ -493,7 +440,7 @@ def create_app(db_path: str, seed: int, n_households: int = 80, cfg=None,
                 log.close()
                 return {"error": f"interview failed: {e}"}
             log.close()
-            S["snap"] = _Snapshot(db_path, block, people)
+            S["snap"].refresh()
         return {"answer": answer, "person": person_names[body.person_id]}
 
     @app.post("/api/compile")

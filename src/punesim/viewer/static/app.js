@@ -89,8 +89,15 @@ async function boot() {
   state.day = Math.min(1, meta.days - 1);
   state.t = state.day * DAY + 7 * 3600;
 
-  $("#meta").textContent =
-    `${meta.people} people · ${meta.events} events · seed ${meta.seed} · #${meta.hash.slice(0, 8)}`;
+  const metaEl = $("#meta");
+  metaEl.textContent =
+    `${meta.people} people · ${meta.events} events · seed ${meta.seed}` +
+    (meta.hash ? ` · #${meta.hash.slice(0, 8)}` : '');
+  // Folding the hash walks the whole log — two minutes on a 30-day V3 run — so
+  // it arrives on its own rather than holding up the page.
+  if (!meta.hash) fetch('/api/hash').then(r => r.json()).then(h => {
+    if (h.hash) metaEl.textContent += ` · #${h.hash.slice(0, 8)}`;
+  }).catch(() => {});
   initMap();
   renderRail();
   renderTicker();
@@ -127,7 +134,15 @@ function initMap() {
 
 async function refreshPositions() {
   const t = Math.round(state.day * DAY + state.t % DAY);
-  const pos = await fetch(`/api/positions?t=${t}`).then((r) => r.json());
+  // Whoever is selected is always drawn, however big the city gets — the point
+  // of the map is following one person, not counting all of them.
+  const focus = state.selected ? `&focus=${encodeURIComponent(state.selected)}` : "";
+  const res = await fetch(`/api/positions?t=${t}${focus}`).then((r) => r.json());
+  const pos = res.people;
+  if (res.shown < res.total) {
+    const note = $("#shown");
+    if (note) note.textContent = `showing ${res.shown.toLocaleString()} of ${res.total.toLocaleString()}`;
+  }
   const seen = new Set();
   for (const p of pos) {
     seen.add(p.id);

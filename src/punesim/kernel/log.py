@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS event (
 );
 CREATE INDEX IF NOT EXISTS ev_time ON event(branch_id, sim_time);
 CREATE INDEX IF NOT EXISTS ev_type ON event(type, sim_time);
+-- Reading a log back asks 'this branch, these types, in seq order' far more
+-- than anything else. Without the branch column in the index SQLite prefers
+-- ev_time and scans: 0.89s against 0.00s on a 6.8M-event log.
+CREATE INDEX IF NOT EXISTS ev_branch_type ON event(branch_id, type, seq);
 """
 
 
