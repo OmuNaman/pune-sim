@@ -105,10 +105,6 @@ def _who(pid: str, people: dict[str, Person] | None, block: Block) -> str:
     return pid or "?"
 
 
-def _flatten(s: str) -> str:
-    return " ".join((s or "").lower().split())
-
-
 # A memory is read for weeks. "Last night" is true for one day and wrong
 # forever after, and the 30-day re-soak caught exactly that: a power cut on
 # Thursday night was still "kal raatri" in scenes on Friday, Saturday, Sunday
@@ -116,6 +112,10 @@ def _flatten(s: str) -> str:
 # is rewritten to the day it actually means, at the moment the memory is
 # written, in the languages the scenes are written in.
 _RELATIVE_TIME = (
+    # possessives first, or "yesterday's tiffin" becomes "on Thu 01 Jan's tiffin"
+    (re.compile(r"\byesterday'?s\b", re.IGNORECASE), "{prev}'s"),
+    (re.compile(r"\blast night'?s\b", re.IGNORECASE), "{prev} night's"),
+    (re.compile(r"\btoday'?s\b", re.IGNORECASE), "{today}'s"),
     (re.compile(r"\blast night\b", re.IGNORECASE), "on {prev} night"),
     (re.compile(r"\byesterday\b", re.IGNORECASE), "on {prev}"),
     (re.compile(r"\bkal ratri\b|\bkal raatri\b|\bkalchi raat\b", re.IGNORECASE), "{prev} chya ratri"),
@@ -124,6 +124,10 @@ _RELATIVE_TIME = (
     (re.compile(r"\btoday\b", re.IGNORECASE), "on {today}"),
     (re.compile(r"\baaj\b", re.IGNORECASE), "{today} la"),
 )
+
+
+def _flatten(s: str) -> str:
+    return " ".join((s or "").lower().split())
 
 
 def absolutize(summary: str, sim_time: int) -> str:
@@ -141,8 +145,16 @@ def absolutize(summary: str, sim_time: int) -> str:
 
 def held_memories(log: EventLog, member_ids: set[str], until: int | None = None) -> set[tuple[str, str]]:
     """(person, normalized summary) of everything they already remember."""
+    # Key on what the model WROTE, not on what was stored. absolutize()
+    # rewrites relative time at write time, so comparing against the stored
+    # text would let a re-emitted sentence through the gate — and it would then
+    # be committed pinned to the wrong day, which is worse than the drift the
+    # rewrite exists to prevent.
     return {
-        (e.payload.get("person", ""), _flatten(e.payload.get("summary", "")))
+        (
+            e.payload.get("person", ""),
+            e.payload.get("summary_key") or _flatten(e.payload.get("summary", "")),
+        )
         for e in log.events(type="memory.formed", until_time=until)
         if e.payload.get("person") in member_ids
     }
@@ -568,7 +580,8 @@ def apply_delta(
                 type="memory.formed",
                 sim_time=sim_time,
                 payload={"person": m.person_id, "salience": m.salience,
-                         "summary": absolutize(m.summary, sim_time)},
+                         "summary": absolutize(m.summary, sim_time),
+                         "summary_key": _flatten(m.summary)},
                 caused_by=scene_seq,
                 provenance="llm_scene",
             )

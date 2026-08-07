@@ -90,7 +90,7 @@ class Report(BaseModel):
     note: str = ""
 
 
-def build_canon(log: EventLog, hh, people, block) -> list[str]:
+def build_canon(log: EventLog, hh, people, block, until_day: int | None = None) -> list[str]:
     """Everything the log knows about this family, as flat assertable lines."""
     members = set(hh.member_ids)
     lines = [f"ROSTER of household {hh.id} ({hh.surname} family, {hh.template}):"]
@@ -111,6 +111,8 @@ def build_canon(log: EventLog, hh, people, block) -> list[str]:
         p = e.payload
         if p.get("channel") != "witness" or p.get("person") not in members:
             continue
+        if until_day is not None and e.sim_time // SECONDS_PER_DAY > until_day:
+            continue
         who = people[p["person"]].name
         when = to_datetime(e.sim_time)
         lines.append(
@@ -128,6 +130,12 @@ def build_canon(log: EventLog, hh, people, block) -> list[str]:
     facts = 0
     for e in log.events():
         if e.type in skip:
+            continue
+        # A scene's own message is not ground truth. It reaches the judge
+        # attached to the scene that wrote it, where it belongs.
+        if e.provenance == "llm_scene":
+            continue
+        if until_day is not None and e.sim_time // SECONDS_PER_DAY > until_day:
             continue
         p = e.payload
         touched = {p.get(k) for k in ("person", "sender", "complainant", "victim", "entity_id")}
@@ -224,8 +232,17 @@ def main() -> int:
 
     log = EventLog(args.db)
     try:
-        canon = build_canon(log, hh, people, block)
         scenes = build_scenes(log, hh, people)
+        # Canon is rebuilt per batch and bounded by that batch's last day: a
+        # judge shown the whole month faults a day-19 scene against a day-26
+        # event, which is not a contradiction, it is the future.
+        canon_by_day = {
+            chunk_end: build_canon(log, hh, people, block, until_day=chunk_end)
+            for chunk_end in {
+                scenes[min(i + args.batch, len(scenes)) - 1][0]
+                for i in range(0, len(scenes), args.batch)
+            }
+        } if scenes else {}
     finally:
         log.close()
     if not scenes:
@@ -240,7 +257,8 @@ def main() -> int:
     for i in range(0, len(scenes), args.batch):
         chunk = scenes[i : i + args.batch]
         body = (
-            "CANON (ground truth):\n" + "\n".join(canon)
+            "CANON (ground truth, up to this batch's last day):\n"
+            + "\n".join(canon_by_day[chunk[-1][0]])
             + f"\n\nSCENES (days {chunk[0][0]}-{chunk[-1][0]} of {scenes[-1][0]}):\n"
             + "\n\n".join(b for _, b in chunk)
             + "\n\n" + SCHEMA_HINT

@@ -51,6 +51,16 @@ CLOCKWORK_ACTIVITIES = {"work", "driving_rounds", "school", "errand", "admitted"
 ABSENCE_WORDS = re.compile(
     r"\b(home|rest|sick|stay|stays|shelter|hospital|admitted|bed|ill|unwell|indoors|ghar)\b", re.IGNORECASE
 )
+# Words that are true for one day and wrong forever after. A memory is read
+# for weeks, so any of these surviving into one is a dated falsehood waiting
+# to be copied - 147 of the 520 memories in the second soak carried one.
+RELATIVE_TIME_WORDS = re.compile(
+    r"\b(yesterday|last night|last week|tonight|this morning|tomorrow|"
+    r"kal|kalchi|kalcha|kalche|parva|aaj|raatri|sakali|"
+    r"day before|next day|earlier today)\b",
+    re.IGNORECASE,
+)
+
 SPEAKER_RE = re.compile(r"^\s*([^:\n]{1,40}?)\s*:", re.MULTILINE)
 HONORIFIC_RE = re.compile(
     r"\b([A-Z][a-z]{2,15})\s+(tai|dada|kaka|kaki|mavshi|aji|ajoba|mama|mami|didi|bhau)\b"
@@ -555,6 +565,26 @@ class Audit:
                  f"{len(quiet)} days rendered no morning scene at all",
                  [f"days: {quiet[:20]}"] if quiet else [])
 
+    def probe_memory_time(self) -> None:
+        """A memory is read for weeks; a relative time word in one is true for a
+        day and wrong forever after. absolutize() rewrites the ones it knows —
+        this probe reports the ones it does not, because the vocabulary is open
+        and a silent gap is exactly how the last drift survived a whole soak."""
+        leftovers: list[str] = []
+        for e in self.by_type["memory.formed"]:
+            hits = RELATIVE_TIME_WORDS.findall(e.payload.get("summary", "") or "")
+            if hits:
+                leftovers.append(
+                    f"seq{e.seq} d{e.day} {e.payload.get('person')}: "
+                    f"{sorted({h.lower() for h in hits})} in \"{e.payload.get('summary', '')[:70]}\""
+                )
+        self.add(
+            "MEMORY-RELATIVE-TIME",
+            "WARN" if leftovers else "PASS",
+            f"{len(leftovers)} memories still carry a relative time word",
+            leftovers[:20],
+        )
+
     def probe_talk(self) -> None:
         """Does anyone in this block ever talk to someone from another house?
         The first soak's answer was no, across 30 days and 306 people."""
@@ -672,6 +702,7 @@ class Audit:
         self.probe_hazards()
         self.probe_info()
         self.probe_scenes()
+        self.probe_memory_time()
         self.probe_talk()
         self.probe_cost()
         self.probe_temporal_drift()
