@@ -341,3 +341,42 @@ def test_the_lights_coming_back_is_news(tmp_path, world):
         if (h := state.info.holdings.get(pid, {}).get(outage_key)) and not h.stifled
     ]
     assert not still_live, f"{len(still_live)} people saw the lights come back and kept spreading the outage"
+
+
+def test_every_action_says_whether_it_means_staying_away():
+    """The recurring bug in this lane is an action defaulting to avoidance.
+
+    First it was `outage`: a power cut had no action mapped, fell through to
+    DEFAULT_ACTION, and 255 of 306 people stopped going to a place because the
+    lights had been off. Then it was `store_water`, which *is* mapped — but the
+    engine recorded an avoidance for every belief action regardless of which one
+    it was, so 1,138 people who filled a drum were also marked as shunning the
+    pumping station.
+
+    Both are the same mistake at different layers: something that is not
+    avoidance being treated as avoidance because nothing forced the question.
+    So every action this lane can emit must be classified, one way or the other.
+    """
+    emitted = {action for action, _threshold in info.ACTION_THRESHOLDS.values()}
+    emitted.add(info.DEFAULT_ACTION[0])
+    non_avoiding = {"store_water"}
+    unclassified = emitted - info.AVOIDING_ACTIONS - non_avoiding
+    assert not unclassified, (
+        f"{sorted(unclassified)} can be emitted by the belief lane but nothing says "
+        "whether it means the believer stops going to the place. Add it to "
+        "info.AVOIDING_ACTIONS or give it a handler in engine/info_pass.py — do not "
+        "let it default."
+    )
+    assert "store_water" not in info.AVOIDING_ACTIONS, (
+        "filling a drum because the supply was cut is not a reason to stay away "
+        "from where it was cut"
+    )
+
+
+def test_resuming_a_run_without_its_state_is_refused(tmp_path):
+    """`start_day` without `state` would quietly start a second world."""
+    block = Block.load()
+    hhs, people = synthesize(SEED, block, n_households=10)
+    log = EventLog(tmp_path / "resume.db")
+    with pytest.raises(ValueError, match="start_day"):
+        engine.run_simulation(log, SEED, block, hhs, people, days=1, start_day=4)

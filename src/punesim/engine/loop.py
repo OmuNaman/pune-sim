@@ -48,6 +48,14 @@ def run_simulation(
     # fresh SimState per day would reset exactly the accumulation worth
     # measuring, and would also re-fire everyone's opening pressures.
     fresh = state is None
+    if fresh and start_day:
+        raise ValueError(
+            f"start_day={start_day} with no state: this would silently begin a *new* world "
+            "on day "
+            f"{start_day} — no run.meta, everyone's opening pressures re-fired, nobody "
+            "remembering anything they have heard. Pass the state returned by the "
+            "previous call."
+        )
     if fresh:
         state = SimState(canon=Canon(), registry=core_registry(), attention=AttentionField())
         state.proc.finances = proc_mod.init_finances(run_seed, households, people)
