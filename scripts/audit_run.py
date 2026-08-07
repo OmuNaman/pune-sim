@@ -92,7 +92,10 @@ class Result:
 
 
 class Audit:
-    def __init__(self, events: list[Event], people: dict, households: list, n_days: int):
+    def __init__(
+        self, events: list[Event], people: dict, households: list, n_days: int,
+        *, partial_last_day: bool = False,
+    ):
         self.events = events
         self.people = people
         self.households = households
@@ -105,6 +108,12 @@ class Audit:
         self.types = frozenset(self.by_type)
         self.hh_of = {p.id: p.household_id for p in people.values()}
         self.results: list[Result] = []
+        # Auditing a db while the run is still writing it is legitimate — you
+        # want early signal — but the last day is half-built: its INFO pass and
+        # nightly tick have not run, so probes that ask "did this get a
+        # consequence?" would fail on a consequence that is merely not yet due.
+        self.last_day = max((e.day for e in events), default=0)
+        self.partial_last_day = partial_last_day
 
     # -- helpers ---------------------------------------------------------- #
 
@@ -399,7 +408,11 @@ class Audit:
         )
 
     def probe_hazards(self) -> None:
-        hazards = [e for e in self.events if e.type.startswith("hazard.")]
+        hazards = [
+            e for e in self.events
+            if e.type.startswith("hazard.")
+            and not (self.partial_last_day and e.day == self.last_day)
+        ]
         if not hazards:
             self.add("HAZARD-PERCEPT", "SKIP", "no hazards in this run")
             return
@@ -663,6 +676,8 @@ def main() -> int:
     ap.add_argument("--households", type=int, default=80)
     ap.add_argument("--branch", type=int, default=0)
     ap.add_argument("--strict", action="store_true", help="promote WARN to FAIL")
+    ap.add_argument("--live", action="store_true",
+                    help="the run is still writing: skip the last, half-built day")
     ap.add_argument("--details", type=int, default=12, help="hits printed per failing probe")
     args = ap.parse_args()
 
@@ -701,7 +716,7 @@ def main() -> int:
         return 2
 
     n_days = max(e.day for e in events) - min(e.day for e in events) + 1
-    audit = Audit(events, people, hhs, n_days)
+    audit = Audit(events, people, hhs, n_days, partial_last_day=args.live)
     audit.run()
 
     order = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3}
@@ -711,6 +726,11 @@ def main() -> int:
         f"branch {args.branch} | seed {seed}{' (corroborated by run.meta)' if corroborated else ' (unverified)'}"
         f" | {households} households | {len(people)} people | {n_days} days | {len(events):,} events\n"
     )
+    if audit.partial_last_day:
+        print(
+            f"NOTE: --live, so day {audit.last_day} is treated as half-built (its evening\n"
+            "      passes have not run) and probes that need a whole day skip it.\n"
+        )
     for r in results:
         print(f"{r.status:5s} {r.probe:24s} {r.headline}")
     fails = [r for r in results if r.status == "FAIL"]
