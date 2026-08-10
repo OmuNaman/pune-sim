@@ -76,7 +76,18 @@ def witnessed_facts(
     Deliberately NOT bounded by the recent-events window. A fire you watched on
     Friday afternoon is still a fixed fact on Wednesday — the soak's model, given
     only a vague memory and no timestamp, decided it had happened "at night",
-    contradicting an event four of the family had personally witnessed."""
+    contradicting an event four of the family had personally witnessed.
+
+    The unbounded read looks like the quadratic-in-run-length bug this repo has
+    fixed three times, and it is not — measured, because it is cheap to check
+    and I nearly "fixed" it on the strength of the shape alone. A 30-day run at
+    12,000 households holds **75,042** info.heard events in total, so a full
+    scan costs 0.1s and the ~420 calls a whole run makes add ~42 seconds. The
+    info lane emits per *transmission*, not per co-presence window, and 16% of
+    those are witness rows. If a future change makes hearings grow with
+    population the way windows do, filter `$.channel` in SQL and this becomes
+    0.1s again; until then the bound would buy nothing and cost the semantics
+    above."""
     # One line per thing seen, not per witness: four family members watching the
     # same fire produced four near-identical lines, and a prompt full of near-
     # identical lines is exactly what teaches a model to repeat itself.
