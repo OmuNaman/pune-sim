@@ -31,6 +31,8 @@ def run(
     follow: list[str] = typer.Option(None, "--follow", help="Household or person id rendered every day, ADDITIVE to k (repeatable; raises cost and narrows coverage of everyone else)"),
     talk: bool = typer.Option(True, "--talk/--no-talk", help="Render the day's one cross-household exchange (needs --scenes; one extra call/day)"),
     block: str = typer.Option("kasba", help="Named world block: kasba (the V0-V2 pin) | oldcity (V3's four peths)"),
+    checkpoint: bool = typer.Option(False, "--checkpoint", help="Save the world beside the log after every day, so --resume can pick it up"),
+    resume: bool = typer.Option(False, "--resume", help="Continue a killed run from its checkpoint instead of starting over (implies --checkpoint; keeps the existing log)"),
 ) -> None:
     """Synthesize the Kasba block and run sim days (clockwork; --scenes adds minds)."""
     from pathlib import Path
@@ -43,32 +45,67 @@ def run(
     from punesim.population import synthesize
     from punesim.world.block import load_for
 
+    from punesim.engine import checkpoint as ckpt_mod
+
     cfg = config.from_env()
     run_seed = seed if seed is not None else cfg.run_seed
     path = Path(db)
     path.parent.mkdir(parents=True, exist_ok=True)
-    for suffix in ("", "-wal", "-shm"):
-        p = Path(str(path) + suffix)
-        if p.exists():
-            p.unlink()
+    ckpt_path = Path(str(path) + ".state")
+    if resume and not ckpt_path.exists():
+        typer.echo(f"--resume: no checkpoint at {ckpt_path}")
+        raise typer.Exit(2)
+    if not resume:  # a resumed run keeps the log it is continuing
+        for suffix in ("", "-wal", "-shm"):
+            p = Path(str(path) + suffix)
+            if p.exists():
+                p.unlink()
 
     world = load_for(households, block)
     hhs, people = synthesize(run_seed, world, n_households=households)
     log = EventLog(path)
+
+    state, start_day = None, 0
+    if resume:
+        try:
+            state, start_day, dropped = ckpt_mod.resume_point(
+                ckpt_path, log, run_seed=run_seed, households=households, block=block, days=days
+            )
+        except ckpt_mod.CheckpointMismatch as exc:
+            typer.echo(f"--resume: {exc}")
+            raise typer.Exit(2)
+        typer.echo(f"resuming at day {start_day}"
+                   + (f"; rolled back {dropped:,} row(s) from the interrupted day" if dropped else ""))
+        if start_day >= days:
+            typer.echo(f"already complete: the checkpoint ends at day {start_day - 1} of {days}")
+            raise typer.Exit(0)
 
     injections = None
     if inject:
         injections = [engine.Injection.parse(o) for o in orjson.loads(Path(inject).read_bytes())]
     gateway = Gateway(cfg, Cassette(cfg.cassette_path), log=log) if scenes else None
 
+    on_day_end = None
+    if checkpoint or resume:
+        def on_day_end(day: int, st) -> None:  # noqa: F811 — deliberate closure
+            ckpt_mod.save(
+                ckpt_path, st, day=day,
+                seq=log._conn.execute("SELECT coalesce(max(seq),0) FROM event").fetchone()[0],
+                run_seed=run_seed, households=households, block=block, days=days,
+            )
+
     n, _state = engine.run_simulation(
         log, run_seed, world, hhs, people,
-        days=days, gateway=gateway, scenes_k=k,
+        days=days - start_day, start_day=start_day, state=state,
+        gateway=gateway, scenes_k=k,
         scene_gate_mode=cfg.scene_gate_mode, injections=injections,
         hazards=hazards, follow=tuple(follow or ()), talk=talk, block_name=block,
+        on_day_end=on_day_end,
     )
     typer.echo(f"seed={run_seed}  households={len(hhs)}  people={len(people)}  block={block}")
-    typer.echo(f"events committed : {n} over {days} day(s)"
+    ran = days - start_day
+    typer.echo(f"events committed : {n} over {ran} day(s)"
+               + (f" (days {start_day}-{days - 1} of {days})" if start_day else "")
                + (f"  (scenes on, k={k}, gate={cfg.scene_gate_mode})" if scenes else "  (zero LLM)"))
     if injections:
         typer.echo(f"injections       : {len(injections)}")

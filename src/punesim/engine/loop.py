@@ -37,6 +37,7 @@ def run_simulation(
     talk: bool = True,
     block_name: str = DEFAULT_BLOCK,
     state: SimState | None = None,
+    on_day_end=None,
 ) -> tuple[int, SimState]:
     """The V1 day pipeline: gated scenes -> compile (belief-bent) -> injections
     + sampled hazards -> split-commit with reaction scenes -> INFO propagation
@@ -316,4 +317,10 @@ def run_simulation(
         state.gate_marks.update(p_marks)
         for hid in {**info_marks, **p_marks}:
             state.attention.bump(hid, 1.5, tick=day * 288 + 287)
+
+        # The day is complete: every lane has committed and `state` is a
+        # consistent world. This is the ONLY moment a checkpoint may be taken,
+        # which is why the hook lives here and not on a timer.
+        if on_day_end is not None:
+            on_day_end(day, state)
     return total, state
