@@ -103,6 +103,14 @@ def branch_run(
         days=days, gateway=gateway, scenes_k=scenes_k,
         scene_gate_mode=scene_gate_mode, injections=injections,
         hazards=had_hazards if hazards is None else hazards,
+        # Without this the branch RUNS on `block` correctly and RECORDS the
+        # default one, because run.meta omits `block` when it is the default.
+        # So a branch of a 12k oldcity run wrote a run.meta implicitly claiming
+        # kasba, and every tool downstream — the audit, the continuity read,
+        # follow, interview — would faithfully rebuild the wrong 306-person
+        # world for it. The same bug as world/roster.py exists to stop, arriving
+        # through the one door that writes its own metadata.
+        block_name=block.name,
     )
     log.close()
     return BranchResult(

@@ -112,3 +112,32 @@ def test_branch_is_deterministic(tmp_path, world):
         hashes.append(log.determinism_hash())
         log.close()
     assert hashes[0] == hashes[1]
+
+
+@pytest.mark.skipif(
+    not __import__("pathlib").Path("data/anchors/oldcity_places.geojson").exists(),
+    reason="oldcity anchor data not fetched",
+)
+def test_a_branch_records_the_block_it_actually_ran(tmp_path):
+    """The branch RAN on the right world and RECORDED the default one.
+
+    run.meta omits `block` when it is the default, so a branch of an oldcity run
+    wrote metadata implicitly claiming kasba — and every tool downstream would
+    faithfully rebuild the wrong 306-person world for it. Nothing raises; the
+    ids all resolve to somebody."""
+    from punesim.world.block import load_for
+
+    block = load_for(20, "oldcity")
+    hhs, people = synthesize(SEED, block, n_households=20)
+    log = EventLog(tmp_path / "oc.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=1, block_name="oldcity")
+    log.close()
+
+    out = branch_mod.branch_run(
+        tmp_path / "oc.db", tmp_path / "oc-branch.db",
+        block=block, synthesize=synthesize, add_days=1,
+    )
+    log2 = EventLog(out.db_path)
+    meta = branch_mod.read_meta(log2)
+    log2.close()
+    assert meta["block"] == "oldcity", meta
