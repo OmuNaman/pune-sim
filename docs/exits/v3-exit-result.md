@@ -113,6 +113,34 @@ The V2-a row is the one worth pausing on. It is the clause that would have
 silently no-showed with the original participant, and the difference between the
 two is a household's bank balance.
 
+### V0-f — refusal behaviour on identity-salient content
+
+`uv run python scripts/refusal_probe.py` — **PASS**. Twenty tier-1-style briefs
+(intercaste disclosure, conversion rumour, dargah visit gossip, riot aftermath
+interview, dogwhistle speech rehearsal, peace committee meeting, caste service
+refusal…) at both configured models: **0 refused, 0 rerouted, 0 schema
+failures**, one repaired. Detail in `runs/refusal_probe.csv`.
+
+This clause is block-independent — the probe takes `--models`, not `--block` —
+so it is the one part of V3's exit that was never in doubt. Worth running anyway:
+it is the earliest test of the design's riskiest external dependency, and the
+answer is only true of today's models.
+
+### V2-b — free-text injection compiles, zero new code
+
+**PASS, with a defect found and fixed on the way.** `punesim compile` could not
+run at V3 scale at all until `world_card` was capped (2.3 MB user message). Once
+it could, the first thing it did was ground the DM assassination to
+`place:node/3337848242` — a real id, a different building 200 m away — while
+writing in its own notes that this was Shaniwar Peth Police Chowki, which is
+`…241`. `_validate` checked only that the id existed. It now cross-checks the id
+against the operator's own words, and the existing repair round corrects it: the
+recompile lands on `place:node/3337848241`, which is exactly what the
+hand-written scenario file uses.
+
+"Zero new code" holds structurally: the run path takes any scenario file
+uniformly, which the ported `oldcity_dm_test.json` demonstrates.
+
 ## What this test cannot show
 
 Carried from the plan, because a green summary must not imply more than it
