@@ -1,0 +1,32 @@
+[
+  {
+    "comment": "PLACE UNCHANGED: place:node/10172994194 is Tulshibaug Mandir on both blocks, so the claim key cl:tulshibaug_water still matches the sentence minds/info.py renders from the subject's name. Proximity is irrelevant here - _seed_rumor seeds first-hearers from participants with no distance term, and the place is used only as claim.subject. PARTICIPANTS UNCHANGED: on oldcity person:001.1 = Sharvari Sathe, 31, shopkeeper and person:002.3 = Meena Bafna, 34, tailor - different people from kasba, but both exist and are adults, which is all this injection needs. Credence 0.85 clears the water topic's store_water threshold of 0.6, so BOTH SEEDS act on day 0 by construction; the honest liveness test is therefore a NON-seed hearer acting by day 3, and store_water is not in AVOIDING_ACTIONS so this claim never produces a plan.avoided.",
+    "day": 0,
+    "time": "18:30",
+    "type": "info.rumor",
+    "place": "place:node/10172994194",
+    "participants": ["person:001.1", "person:002.3"],
+    "payload": {
+      "credence": 0.85,
+      "claim": {
+        "key": "cl:tulshibaug_water",
+        "subject": "place:node/10172994194",
+        "predicate": "contaminated",
+        "topics": ["water", "health"],
+        "charge": 0.8,
+        "specificity": 0.5,
+        "veracity": "false",
+        "valence": -0.7
+      }
+    }
+  },
+  {
+    "comment": "Same re-grounding as oldcity_school_bus_crash.json: place kept, participant moved to the child who actually attends this school on oldcity.",
+    "day": 1,
+    "time": "07:20",
+    "type": "hazard.road.collision",
+    "place": "place:node/3681735096",
+    "participants": ["person:1160.3"],
+    "severity": 0.6
+  }
+]

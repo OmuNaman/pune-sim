@@ -1,0 +1,15 @@
+[
+  {
+    "comment": "V0's exit scenario, re-grounded for --block oldcity --households 12000 --seed 108. PLACE UNCHANGED: place:node/3681735096 is the same Ratanben Chunilal Mehta (RCM) Gujarati High School on both blocks - kasba's 124 named places are a strict subset of oldcity's 438, 0 missing and 0 with a differing name or kind, so nothing about the four scenario files' geography had to move. PARTICIPANT CHANGED, because a relation broke rather than an id: on oldcity person:000.2 is a different child whose school is 688 m away, so the original commits a school-gate collision at a school the victim never walks to. person:1160.3 = Suhas Thorat, 10, student, work_id == this school (verified). Household hh:1160 (Thorat, nuclear_kids, 5) has 2 adults, which the school-call message.sent and the FIR complainant both need, and p_financial 0.544 -> 0.721 on a 22,500 bill, i.e. below the 0.6 threshold before and above it after. TIME UNCHANGED at 07:20; docs/architecture.md says 08:10 and the file says 07:20, and V3's exit is 're-runs unchanged', so the file wins and the doc drift is noted rather than fixed.",
+    "day": 1,
+    "time": "07:20",
+    "type": "hazard.road.collision",
+    "place": "place:node/3681735096",
+    "participants": ["person:1160.3"],
+    "severity": 0.6,
+    "payload": {
+      "mechanism": "school van clipped by a reversing truck at the school gate",
+      "note": "V0 exam scenario: Suhas Thorat (10) injured on the morning school run"
+    }
+  }
+]

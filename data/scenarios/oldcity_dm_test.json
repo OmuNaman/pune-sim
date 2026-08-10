@@ -1,0 +1,12 @@
+[
+  {
+    "comment": "UNCHANGED in every field - the one file of the four that ports literally. place:node/3337848241 is Shaniwar Peth Police Chowki on both blocks and `participants` is already empty, so there is nothing to re-ground. Deliberately peripheral on both (rank 10 of 11 by nearest-police catchment on oldcity, 757 m from the home centroid); re-centring it would quietly make the DM test a louder event than V0's. This file is the ARTIFACT of a compile, not the test itself: V2's free-text clause is decided by running `punesim compile` fresh and comparing its preview to this shape.",
+    "day": 2,
+    "time": "12:00",
+    "type": "hazard.violence.attack",
+    "place": "place:node/3337848241",
+    "participants": [],
+    "severity": 0.8,
+    "payload": {}
+  }
+]

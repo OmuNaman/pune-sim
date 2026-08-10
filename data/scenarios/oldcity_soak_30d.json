@@ -1,0 +1,34 @@
+[
+  {
+    "comment": "PLACE UNCHANGED: place:node/11430153883 is Nilkantheshwar on both blocks. Unlike the rumour path this one IS proximity-driven (world/hazards.py, 220 m radius, +/-30 min presence) and it holds up on oldcity: rank 3 of 61 temples, 395 homes within 220 m, so a collision here is still in the dense residential core. PARTICIPANT CHANGED, and this is the most consequential edit in the port. The original person:002.2 exists on oldcity as Sanjay Bafna, 38, nurse - but hh:002 holds liquid 103,900 against monthly costs 35,700, giving p_financial 0.120, and a 21,200 hospital bill leaves it at 0.164. Below the 0.6 threshold both before AND after, so pressure.crossed never fires and V2's exit chain silently no-shows while every probe passes. Measured, not assumed. person:1160.3 (Suhas Thorat, 10, hh:1160, liquid 22,400 / costs 30,500) crosses: p_financial 0.544 -> 0.721. Keeping the same household as the V0 run also means one --follow serves V0's scene-reference clause, V1's continuity clause and V2's chain.",
+    "day": 5,
+    "time": "11:40",
+    "type": "hazard.road.collision",
+    "place": "place:node/11430153883",
+    "participants": ["person:1160.3"],
+    "severity": 0.55
+  },
+  {
+    "comment": "PLACE AND SUBJECT CHANGED TOGETHER - the only place-id edit in the whole port. cl:mandal_funds was pinned to a temple on kasba only because the kasba extract holds no mandal. oldcity holds a real one: place:way/666675662 = Prakash Navajawan Mandal, engine kind 'temple' so nothing mechanical shifts, rank 2 of 61 by catchment, 334 homes within 220 m. `place` and `claim.subject` are the same node string here and MUST stay equal, or minds/info.py renders a different place name than the event carries. TYPO HAZARD worth stating: place:node/3337848240 is one digit off 3337848241 and is a real, different oldcity place (Samarth Police Station) - a single-character slip lands on a valid id and fails silently. PARTICIPANTS UNCHANGED: person:014.0 = Vaishali Kale, 22, student and person:035.3 = Gauri Joshi, 37, shopkeeper on oldcity; both exist and are adults. Noted drift: person:035.3 was a 19-year-old student on kasba, so the rumour now starts in a shop rather than a student network - semantic, not structural, since fraud maps to stop_patronage at threshold 0.7 and credence 0.8 clears it either way.",
+    "day": 12,
+    "time": "17:45",
+    "type": "info.rumor",
+    "place": "place:way/666675662",
+    "participants": ["person:014.0", "person:035.3"],
+    "payload": {
+      "credence": 0.8,
+      "claim": {
+        "key": "cl:mandal_funds",
+        "subject": "place:way/666675662",
+        "predicate": "misappropriated",
+        "topics": ["fraud"],
+        "quantity": 200000,
+        "unit": "rupees",
+        "charge": 0.75,
+        "specificity": 0.45,
+        "veracity": "unknown",
+        "valence": -0.6
+      }
+    }
+  }
+]
