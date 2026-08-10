@@ -11,6 +11,12 @@ V3's exit is two clauses:
 The cost half was met on 2026-08-08 at **$0.0031/sim-day** against a $2 bar. The
 other half had never been run. This is that run.
 
+**Result: 10 of 11 clauses pass, 0 fail, 1 not run.** The unrun one is V1-c, the
+30-day continuity soak, which four attempts could not get through before the
+environment killed them; the command to close it is below. Every other clause
+V0, V1 and V2 name is decided, at 12,000 households and 49,578 people, and none
+of them failed.
+
 ## What had to be fixed before it could run at all
 
 A five-agent read-only survey of the repo found six blockers. Four were the same
@@ -245,6 +251,44 @@ hand-written scenario file uses.
 
 "Zero new code" holds structurally: the run path takes any scenario file
 uniformly, which the ported `oldcity_dm_test.json` demonstrates.
+
+### V1-c — 30 sim-days, zero canon contradictions — NOT RUN
+
+The one clause of eleven that has no verdict. Not because it failed: because
+four separate attempts to run the 30-day soak were killed by the environment
+before finishing, at days 22, 8, 2 and 2 of 30.
+
+**A killed run loses everything.** `run_simulation` accepts a `start_day`, but
+only together with the in-memory `SimState` — `engine/loop.py` explicitly
+refuses `start_day` without it, because resuming from a bare log "would silently
+begin a *new* world" with everyone's opening pressures re-fired and nobody
+remembering anything they had heard. There is no on-disk checkpoint, so every
+attempt is all-or-nothing at roughly 2.5 hours.
+
+To close it, run this where nothing will reap it:
+
+```bash
+PUNESIM_RUNS_DIR=runs/exit uv run punesim run --days 30 --block oldcity \
+  --households 12000 --seed 108 --scenes --k 5 --follow hh:1160 --hazards \
+  --inject data/scenarios/oldcity_soak_30d.json --db runs/exit/soak/events.db
+
+uv run python scripts/continuity_read.py --db runs/exit/soak/events.db --household hh:1160
+uv run python scripts/exit_check.py       --db runs/exit/soak/events.db --household hh:1160
+```
+
+**PASS** is exit 0 with `VERDICT: PASS`. `VERDICT: PARTIAL` is *not* a pass —
+batches the judge could not read are printed and are not a pass for those days.
+
+What is already known narrows the question. The same family, `hh:1160`, was
+judged clean over five days by the judge plus an independent skeptic, interview
+included, with three first-pass findings raised and all three refuted. So the
+open question is not whether the family is coherent — it is whether coherence
+*survives a month*, which is the thing soak1 through soak4 were built to answer
+at 80 households and which has never been asked at 12,000.
+
+A checkpoint — writing `SimState` to disk at day boundaries so a long soak can
+resume — would make this clause cheap to close and is worth building before the
+next 30-day run of anything.
 
 ## What this test cannot show
 
