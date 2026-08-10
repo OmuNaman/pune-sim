@@ -224,12 +224,16 @@ def v1a_rumour_lives(log: Log, claim_key: str, seeds: set[str]) -> Clause:
         f"threshold by construction, so counting them makes the clause vacuous)",
     ]
     if not hearings:
-        # Distinguish "the rumour lane is broken" from "you named a claim this
-        # run never carried" — they look identical in the counts and are not
-        # the same finding.
+        # Three different things look identical in the counts, and only one of
+        # them is a failure of the clause.
         keys = sorted({p.get("claim_key") for _s, _t, _ty, p, _c, _pr
                        in log.rows("AND type='info.heard'") if p.get("claim_key")})
-        return c.say("FAIL", f"no hearings of {claim_key} in days 0-3.",
+        seeded_here = log.rows("AND provenance='user' AND type LIKE 'info.%'")
+        if not seeded_here:
+            return c.say("SKIP", "no rumour was injected into this run at all — this clause "
+                                 "is decided on the v1_exam run, not here")
+        return c.say("FAIL", f"a rumour WAS injected but there are no hearings of {claim_key} "
+                             f"in days 0-3.",
                      f"claims this log does carry: {', '.join(keys) or 'none at all'}")
     ok = (len(people) >= 5 and (len(variants) > 1 or ops > 0) and hop >= 1
           and actors and min(actors.values()) <= 3)

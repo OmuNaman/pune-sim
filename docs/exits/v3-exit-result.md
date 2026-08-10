@@ -1,0 +1,116 @@
+# V3 exit test — result
+
+*2026-08-10. Plan and pass criteria: [v3-exit-plan.md](v3-exit-plan.md). Every
+verdict below is reproducible with `scripts/exit_check.py`.*
+
+V3's exit is two clauses:
+
+> V0's scenario re-runs unchanged on 4 real peths / 12k households; <$2/sim-day
+> background.
+
+The cost half was met on 2026-08-08 at **$0.0031/sim-day** against a $2 bar. The
+other half had never been run. This is that run.
+
+## What had to be fixed before it could run at all
+
+A five-agent read-only survey of the repo found six blockers. Four were the same
+bug wearing different clothes, and none of them raise.
+
+**A tool rebuilt the population from its own defaults instead of the log's
+`run.meta`.** `hh:000` and `person:001.1` exist in every world this repo can
+synthesize, so pointing a tool at the wrong roster does not error — it prints a
+different family's name over the right family's events.
+
+| where | what it did |
+|---|---|
+| `punesim interview` | assembled an 80-household kasba roster for a 12k oldcity log, put a stranger's name on the answer, **and committed it back into the log** — the only read-side command that writes |
+| `punesim follow` | "unknown person" for 49,272 of 49,578 residents |
+| `scripts/continuity_read.py` | would have judged a kasba family's canon against oldcity's scenes — this is the instrument that decides V1's exit |
+| `punesim branch` | ran on the right world and **recorded** the default one, because `run.meta` omits `block` when it is the default |
+
+This is the failure that cost a soak once already (a windowed audit fell back to
+kasba and regenerated 46,671 people for a log of 49,578, then passed nineteen
+probes against a world nobody had run). It was fixed in `audit_run.py` and never
+ported. It is one module now — `src/punesim/world/roster.py` — and the rule is
+that only what the caller **explicitly asked for** is worth refusing over; a
+command's own default that disagrees with the log is the log's business.
+
+**`world_card` emitted one line per person.** 20,649 characters at kasba's 306
+people; **2,326,466** at oldcity's 49,578. A 2.3 MB user message, so `punesim
+compile` could not run at V3 scale and V2's exit clause was unreachable. The
+people directory is capped at 400 and the places half kept whole — 438 named
+places, 23,184 characters, and it is the half that grounds a location. Kasba's
+card is byte-identical below the cap, verified rather than assumed, so the
+compile cassettes still hit and no hash moved.
+
+**`continuity_read` fed the interview answer to the judge as canon** — so the
+check for "the day-3 interview matches canon" was treating the interview as the
+truth it was supposed to be measured against.
+
+Left alone deliberately: `EventLog` opens read-write, so `continuity_read`
+cannot be pointed at an archived log safely. Benign here, and the kernel is
+law-1 territory.
+
+## What the port changed, and the one change that mattered
+
+Places barely moved. kasba's 124 named places are a **strict subset** of
+oldcity's 438 — 0 missing, 0 with a differing name or kind — so the school, the
+temple and the police chowki are literally the same nodes. Exactly one place id
+changed, because kasba's extract holds no mandal at all and `cl:mandal_funds`
+had been pinned to a temple; oldcity has a real Prakash Navajawan Mandal.
+
+People moved, and one of those moves is the whole point.
+
+- The V0 crash victim had to change because a **relation** broke, not an id.
+  `person:000.2` is a different child on oldcity whose school is 688 m from the
+  crash site, so the original commits a school-gate collision at a gate the
+  victim never walks through.
+- The 30-day soak's victim had to change or the run would have tested nothing.
+  `hh:002` on oldcity holds ₹103,900 liquid against ₹30,500 monthly costs, so
+  `p_financial` is **0.120 before a hospital bill and 0.164 after** — below the
+  0.6 threshold both times. `pressure.crossed` never fires, V2's exit chain
+  silently stops one link short, and every probe passes. Confirmed
+  independently by running `exit_check.py` against a kasba log with the original
+  participant: FIR ✓, discharge with a ₹21,200 bill ✓, `money.paid` ✓,
+  `p_financial` **none**.
+
+Both now use `person:1160.3` — Suhas Thorat, 10, who actually attends the anchor
+school, whose household has the two adults the school-call and the FIR
+complainant need, and whose `p_financial` goes **0.544 → 0.721** on the bill.
+
+## The clauses
+
+*(filled in from the runs below)*
+
+## What this test cannot show
+
+Carried from the plan, because a green summary must not imply more than it
+proves.
+
+1. **"Re-runs *unchanged*" is not literally what is tested.** Places carry over
+   unchanged and that is measured. The victim does not. The port is the honest
+   reading of the exit, but it is a port, and the exit's own word is "unchanged".
+2. **"Believable" and "matches canon" are judgements, not measurements.**
+   `exit_check.py` reports them UNJUDGED and hands them to `continuity_read`'s
+   judge-plus-skeptic. Every mechanical proxy considered was worse than the
+   admission.
+3. **One household of 12,000.** V0-b, V1-c and V2-a are all decided on
+   `hh:1160`. Nothing here says the other 11,999 are coherent — and at `k=5`,
+   ~14 of 12,000 are on camera on a given day, so most of the city has no prose
+   to be incoherent in.
+4. **Nothing tests the branch/diff half of V2 at scale.** `punesim diff`
+   materializes both logs whole; a 30-day 12k pair is several GB. The `branch`
+   metadata bug above was fixed, but "branch-lite works at V3 scale" remains
+   unknown.
+5. **The 30-day audit is five slices, not a whole.** `MAX_EVENTS_UNBOUNDED`
+   forbids a single pass, and four probes are unreliable in a window because
+   `n_days` is inflated by the `run.meta` row re-attached at day 0. Cross-window
+   pathologies are visible only through `claim_reach()`'s whole-run aggregate.
+6. **A green run is not a determinism pin.** The replay clause proves this run
+   replays to itself. There is no committed oldcity hash equivalent to
+   `SOAKED_HASH`, so nothing stops the next commit from silently changing
+   oldcity's behaviour. Pinning one would be a separate, deliberate act.
+7. **Hazard rates are still not calibrated to Pune** — absolute rather than
+   per-capita, so the four-peth city draws the same ~0.25 hazards/day an
+   80-household block did. The exit tests that the ripple machinery works, never
+   that the incident rate is plausible.
