@@ -107,6 +107,8 @@ def interview(
     question: str = typer.Argument(help="what the journalist asks"),
     db: str = typer.Option("runs/dev/events.db"),
     seed: int = typer.Option(None),
+    households: int = typer.Option(None, help="normally taken from the log's run.meta"),
+    block_name: str = typer.Option(None, "--block", help="normally taken from the log's run.meta"),
     ghost: bool = typer.Option(False, "--ghost", help="observe only; the person keeps no memory"),
 ) -> None:
     """Pause time and talk to any resident (premium model)."""
@@ -116,20 +118,31 @@ def interview(
     from punesim.kernel.log import EventLog
     from punesim.llm import Cassette, Gateway
     from punesim.minds.interview import interview as _interview
-    from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.world.roster import RosterMismatch, world_for_log
 
     cfg = config.from_env()
-    run_seed = seed if seed is not None else cfg.run_seed
-    block = Block.load()
-    _, people = synthesize(run_seed, block)
+    log = EventLog(db)
+    # The roster comes from the log, not from this command's defaults. It used
+    # to be Block.load() + synthesize(seed) — kasba, 80 households — so an
+    # interview against a 12,000-household oldcity run put a different person's
+    # name on the answer AND committed it back into the log.
+    try:
+        block, _hhs, people, meta = world_for_log(
+            log, seed, households, block_name, fallback_seed=cfg.run_seed
+        )
+    except RosterMismatch as exc:
+        typer.echo(f"interview: {exc}")
+        raise typer.Exit(2)
     if person_id not in people:
         typer.echo(f"unknown person {person_id}")
         raise typer.Exit(1)
-    log = EventLog(db)
     gateway = Gateway(cfg, Cassette(cfg.cassette_path), log=log)
     console = Console()
     p = people[person_id]
+    console.print(
+        f"[dim]{block.name}, {len(people)} people"
+        f"{'' if meta else ' (no run.meta — roster uncorroborated)'}[/dim]"
+    )
     console.print(f"[dim]interviewing {p.name} ({p.age}, {p.occupation})...[/dim]")
     answer = _interview(log, gateway, block, people, person_id, question, ghost=ghost)
     console.print(f"[bold]{p.name}:[/bold] {answer}")
@@ -140,22 +153,33 @@ def follow(
     person_id: str = typer.Argument(help="e.g. person:012.1 (try `punesim census` for ids)"),
     db: str = typer.Option("runs/dev/events.db"),
     seed: int = typer.Option(None),
+    households: int = typer.Option(None, help="normally taken from the log's run.meta"),
+    block_name: str = typer.Option(None, "--block", help="normally taken from the log's run.meta"),
+    day: int = typer.Option(None, help="one sim-day only; a whole V3-scale run is 6.8M events"),
 ) -> None:
     """Print a person's card and their day as a timeline from the event log."""
     from rich.console import Console
 
     from punesim import config
     from punesim.kernel.log import EventLog
-    from punesim.kernel.timebase import to_datetime
-    from punesim.population import synthesize
-    from punesim.world.block import Block
+    from punesim.kernel.timebase import SECONDS_PER_DAY, to_datetime
+    from punesim.world.roster import RosterMismatch, world_for_log
 
     cfg = config.from_env()
-    run_seed = seed if seed is not None else cfg.run_seed
-    block = Block.load()
-    _, people = synthesize(run_seed, block)
-    person = people.get(person_id)
+    log = EventLog(db)
     console = Console()
+    # Same fix as `interview`: the roster is the log's, not this command's.
+    # Before, every id above person:079.x printed "unknown person" against an
+    # oldcity run — 49,272 of 49,578 residents unreachable — and the ones below
+    # it printed the wrong family.
+    try:
+        block, _hhs, people, meta = world_for_log(
+            log, seed, households, block_name, fallback_seed=cfg.run_seed
+        )
+    except RosterMismatch as exc:
+        console.print(f"[red]follow: {exc}[/red]")
+        raise typer.Exit(2)
+    person = people.get(person_id)
     if person is None:
         console.print(f"[red]unknown person {person_id}[/red]")
         raise typer.Exit(1)
@@ -168,9 +192,15 @@ def follow(
         f"[bold]{person.name}[/bold] ({person.age}, {person.occupation}) — "
         f"household {person.household_id}, home {place_name(person.home_id)}"
     )
-    log = EventLog(db)
+    # Bounded in SQL rather than filtered in Python. `punesim follow` on a
+    # 30-day 12k log otherwise deserializes 6.8M events to print one person's
+    # afternoon — the same shape of bug the viewer had.
+    bounds = {}
+    if day is not None:
+        bounds = {"since_time": day * SECONDS_PER_DAY,
+                  "until_time": (day + 1) * SECONDS_PER_DAY}
     mine = sorted(
-        (e for e in log.events() if e.payload.get("person") == person_id),
+        (e for e in log.events(**bounds) if e.payload.get("person") == person_id),
         key=lambda e: (e.sim_time, e.seq),
     )
     for e in mine:

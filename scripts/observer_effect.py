@@ -206,13 +206,12 @@ def main() -> int:
     # --- response: was what moved systematically misfortune? ----------------
     print(f"\n-- outcomes, same households across the pair --")
     print(f"{'kind':<24}{'with':>8}{'without':>9}{'delta':>8}{'p':>10}")
-    called_out, any_outcomes = [], False
+    called_out = []
     for kind in OUTCOMES:
         a = sum(c.get(kind, 0) for c in on["by_hh"].values())
         b = sum(c.get(kind, 0) for c in off["by_hh"].values())
         if a == b == 0:
             continue
-        any_outcomes = True
         p = binom_two_sided(a, a + b)
         print(f"{kind:<24}{a:>8,}{b:>9,}{a - b:>+8,}{p:>10.3f}")
         if p < args.alpha:
@@ -235,11 +234,24 @@ def main() -> int:
     print(f"\nper household: {worse} worse under the camera, {better} better, "
           f"{same} unchanged (sign test p={p_sign:.3f})")
 
-    if not any_outcomes:
-        print("\nNo outcome events in either arm — this pair proves nothing about\n"
-              "the observer effect. Run it longer, or on a block where something happens.")
+    # Power, stated before any verdict. A null result is only worth as much as
+    # the split it could have caught, and with a handful of events that is
+    # nothing at all: at n=3 even every event landing on one side gives p=0.25.
+    # Reporting "no detectable effect" off that is the INFO-ECHO mistake —
+    # passing because there was nothing to look at.
+    n = total_on + total_off
+    smallest = next((k for k in range(n // 2, n + 1)
+                     if binom_two_sided(k, n) < args.alpha), None)
+    if smallest is None:
+        print(f"\nUNDERPOWERED: {n} outcome events across both arms. No split of {n}, not even "
+              f"{n}-0,\nclears alpha={args.alpha} — so this pair could not have detected an "
+              f"observer effect\nof ANY size. That is not evidence of absence. Re-run with a "
+              f"scenario that\nproduces outcomes (data/scenarios/soak_30d.json), or at a "
+              f"population where\nthey happen on their own.")
         return 0
-    print()
+    print(f"\npower: with {n} outcome events, the smallest split this pair could have called "
+          f"is\n{smallest}/{n - smallest} (ratio {smallest / max(1, n - smallest):.2f}x). "
+          f"Anything subtler than that is invisible here.")
     if called_out or p_all < args.alpha or p_sign < args.alpha:
         print("DIVERGENCE — the scene lane moves outcomes, not just prose:")
         for line in called_out:

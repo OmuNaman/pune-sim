@@ -34,8 +34,7 @@ from punesim.kernel.log import EventLog
 from punesim.kernel.timebase import SECONDS_PER_DAY, to_datetime
 from punesim.llm import Cassette, Gateway
 from punesim.minds.scene import _humanize
-from punesim.population import synthesize
-from punesim.world.block import load_for
+from punesim.world.roster import RosterMismatch, world_for_log
 
 SYSTEM = """You are auditing a life simulation for CONTINUITY, the way a script supervisor audits
 a film. You are given (1) the CANON — a family's roster and every fact the simulation's event log
@@ -170,7 +169,13 @@ def build_canon(log: EventLog, hh, people, block, until_day: int | None = None) 
     lines.append("EVERYTHING ELSE THAT HAPPENED TO THEM (institutional and mechanical facts):")
     skip = {"scene.morning", "scene.reaction", "scene.skipped", "scene.invalid_ref",
             "memory.formed", "mood.delta", "plan.revised", "llm.response", "info.heard",
-            "trip.start", "trip.end", "activity.start", "run.meta"}
+            "trip.start", "trip.end", "activity.start", "run.meta",
+            # An interview answer is a thing a person SAID, exactly like scene
+            # prose, and it was landing in canon — so the check that is supposed
+            # to decide "the day-3 interview matches canon" was quietly treating
+            # the interview as the truth it should have been measured against.
+            # It is judged instead, in build_scenes below.
+            "conversation.held"}
     facts = 0
     for e in log.events():
         if e.type in skip:
@@ -200,6 +205,7 @@ def build_scenes(log: EventLog, hh, people) -> list[tuple[int, str]]:
     wrote and the messages it sent. Those payloads are where the first soak's
     invented colleague lived — she never appeared in a transcript, only in a
     memory summary, so a reader given prose alone cannot find her."""
+    members = set(hh.member_ids)
     scenes: dict[int, dict] = {}
     for e in log.events():
         if e.type in ("scene.morning", "scene.reaction") and e.payload.get("household") == hh.id:
@@ -208,6 +214,23 @@ def build_scenes(log: EventLog, hh, people) -> list[tuple[int, str]]:
                 "kind": "MORNING" if e.type == "scene.morning" else "REACTION",
                 "narration": e.payload.get("narration", ""),
                 "transcript": e.payload.get("transcript", ""),
+                "memories": [],
+                "messages": [],
+            }
+        elif (e.type == "conversation.held" and e.payload.get("with") == "journalist"
+              and e.payload.get("person") in members):
+            # V0's exit says "the day-3 interview matches canon", and nothing
+            # checked it: build_scenes collected only scene.morning and
+            # scene.reaction, so the one answer the clause is about was never
+            # put in front of the judge. It is prose a person asserted, judged
+            # on the same terms as any other.
+            who = people.get(e.payload.get("person"))
+            scenes[e.seq] = {
+                "t": e.sim_time,
+                "kind": "INTERVIEW",
+                "narration": f"A journalist asked: {e.payload.get('question', '')}",
+                "transcript": f"{who.name if who else e.payload.get('person')}: "
+                              f"{e.payload.get('answer', '')}",
                 "memories": [],
                 "messages": [],
             }
@@ -253,9 +276,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", required=True, type=Path)
     ap.add_argument("--household", default="hh:000")
-    ap.add_argument("--seed", type=int, default=108)
-    ap.add_argument("--households", type=int, default=80)
-    ap.add_argument("--block", default="kasba", help="kasba | oldcity (normally taken from run.meta)")
+    # All three default to None so that "the caller said so" and "nobody said
+    # anything" are distinguishable: only an explicit value is worth refusing
+    # over when it disagrees with the log.
+    ap.add_argument("--seed", type=int, default=None, help="normally taken from run.meta")
+    ap.add_argument("--households", type=int, default=None, help="normally taken from run.meta")
+    ap.add_argument("--block", default=None, help="kasba | oldcity (normally taken from run.meta)")
     ap.add_argument("--batch", type=int, default=6, help="scenes per judge call")
     ap.add_argument("--out", type=Path, default=None, help="write findings as JSON")
     args = ap.parse_args()
@@ -268,14 +294,32 @@ def main() -> int:
         print("continuity: no OPENROUTER_API_KEY — this check needs a judge model", file=sys.stderr)
         return 2
 
-    block = load_for(args.households, getattr(args, 'block', 'kasba'))
-    hhs, people = synthesize(args.seed, block, n_households=args.households)
+    # The roster comes from the log. This used to be load_for(args.households,
+    # args.block) against defaults of 80/kasba with no run.meta read at all,
+    # which is the exact failure that cost a soak in audit_run.py and was never
+    # ported here: `hh:000` exists in every world this repo can synthesize, so
+    # pointing it at a 12,000-household oldcity run does not error. It assembles
+    # a kasba family as CANON, pulls oldcity scenes for the same id, and asks a
+    # premium judge to find contradictions between two different worlds. It
+    # finds plenty. All artifacts.
+    log = EventLog(args.db)
+    try:
+        block, hhs, people, meta = world_for_log(
+            log, args.seed, args.households, args.block,
+            fallback_seed=108, fallback_households=80,
+        )
+    except RosterMismatch as exc:
+        print(f"continuity: {exc}", file=sys.stderr)
+        return 2
+    if not meta:
+        print("continuity: this log has no run.meta, so the roster is uncorroborated — "
+              "every name below is a guess from --seed/--households.", file=sys.stderr)
     hh = next((h for h in hhs if h.id == args.household), None)
     if hh is None:
         print(f"continuity: no such household: {args.household}", file=sys.stderr)
         return 2
-
-    log = EventLog(args.db)
+    print(f"continuity: {block.name}, {len(people):,} people, household {args.household}",
+          file=sys.stderr)
     try:
         scenes = build_scenes(log, hh, people)
         # Canon is rebuilt per batch and bounded by that batch's last day: a

@@ -94,12 +94,34 @@ Output ONLY one JSON object with fields:
  "narrative": "...", "notes": "..."}"""
 
 
+# Above this many residents the people directory is omitted rather than sent.
+# One line per person is fine for a block you can hold in your head and absurd
+# for a city: 306 people is 20,649 characters, 49,578 people is 2,326,466 — a
+# 2.3 MB user message that no configured model will accept, which meant
+# `punesim compile` simply could not run at V3 scale. The places half stays
+# unconditional: oldcity's 438 named places are 23,184 characters, which is
+# affordable and is the half the model actually needs to ground a location.
+#
+# The cap sits above kasba's 306 so the V0-V2 card is byte-identical and the
+# compile cassettes keep hitting.
+PEOPLE_CARD_MAX = 400
+
+
 def world_card(block: Block, people: dict[str, Person]) -> str:
     lines = ["WORLD CARD — places (id | name | kind):"]
     for p in block.places:
         if p.name:
             lines.append(f"{p.id} | {p.name} | {p.kind}")
     lines.append("")
+    if len(people) > PEOPLE_CARD_MAX:
+        # `_validate` checks participants against the full roster regardless, so
+        # an id the model invents is still caught — it just cannot be browsed.
+        lines.append(
+            f"PEOPLE directory: omitted — this block has {len(people):,} residents. "
+            "Leave `participants` empty unless the text names an exact person id "
+            "(`person:NNNN.N`); casting by presence is the engine's job."
+        )
+        return "\n".join(lines)
     lines.append("PEOPLE directory (id | name | age | occupation):")
     for pid in sorted(people):
         q = people[pid]
