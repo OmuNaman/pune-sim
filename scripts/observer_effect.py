@@ -89,6 +89,9 @@ def pair_problem(on: dict, off: dict) -> str | None:
         a, b = on["meta"].get(key), off["meta"].get(key)
         if a != b:
             return f"{key} is {a!r} with scenes and {b!r} without"
+    if on.get("last_day") != off.get("last_day"):
+        return (f"one arm stopped early: the log reaches day {on.get('last_day')} with "
+                f"scenes and day {off.get('last_day')} without")
     if on["types"].get("scene.morning", 0) == 0:
         return "the --on log has no scenes in it"
     if any(off["types"].get(t) for t in ("scene.morning", "scene.reaction")):
@@ -105,6 +108,11 @@ def read(db: Path) -> dict:
     by_hh: dict[str, Counter] = defaultdict(Counter)
     person_hh_needed: set[str] = set()
     rows = []
+    # Days actually in the log, not days run.meta says were asked for. A run
+    # that was killed at day 14 still carries meta saying 30, and diffing it
+    # against a complete arm reads as a 57% collapse in trips caused by the
+    # camera. Caught exactly that way the first time this script ran.
+    last_day = con.execute("select max(sim_time) from event").fetchone()[0] or 0
     for type_, payload in con.execute("select type, payload from event"):
         types[type_] += 1
         if type_ in OUTCOMES:
@@ -116,8 +124,8 @@ def read(db: Path) -> dict:
                 person_hh_needed.add(pid)
                 rows.append((type_, pid))
     con.close()
-    return {"meta": meta, "types": types, "by_hh": by_hh,
-            "unresolved": rows, "total": sum(types.values())}
+    return {"meta": meta, "types": types, "by_hh": by_hh, "unresolved": rows,
+            "total": sum(types.values()), "last_day": last_day // 86400}
 
 
 def resolve(arm: dict, hh_of: dict[str, str]) -> None:
@@ -142,6 +150,9 @@ def main() -> int:
     ap.add_argument("--alpha", type=float, default=0.01,
                     help="p below which a per-kind gap is called out")
     args = ap.parse_args()
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     on, off = read(Path(args.on)), read(Path(args.off))
 
@@ -179,7 +190,7 @@ def main() -> int:
         key=lambda r: -abs(r[1] - r[2]),
     )
     clock_total_on, clock_total_off = sum(clock_on.values()), sum(clock_off.values())
-    drift = abs(clock_total_on - clock_total_off) / max(1, clock_total_off)
+    drift = (clock_total_on - clock_total_off) / max(1, clock_total_off)  # signed
     print(f"-- what the scene lane touched --")
     print(f"{scene_ev:,} events written by the scene lane itself "
           f"({on['types'].get('scene.morning', 0)} morning scenes, "

@@ -50,9 +50,11 @@ def test_a_large_run_needs_a_real_gap_to_register():
     assert binom_two_sided(300, 500) < 0.001     # 300 vs 200: something
 
 
-def _arm(seed=108, households=80, block="kasba", days=30, scenes=5, reactions=0):
+def _arm(seed=108, households=80, block="kasba", days=30, scenes=5, reactions=0,
+         last_day=29):
     return {"meta": {"seed": seed, "households": households, "block": block, "days": days},
-            "types": {"scene.morning": scenes, "scene.reaction": reactions}}
+            "types": {"scene.morning": scenes, "scene.reaction": reactions},
+            "last_day": last_day}
 
 
 def test_a_matched_pair_is_accepted():
@@ -66,6 +68,14 @@ def test_a_mismatched_pair_is_refused(field, value):
     """Diffing two different worlds produces a confident number about nothing."""
     problem = pair_problem(_arm(), _arm(scenes=0, **{field: value}))
     assert problem and field in problem
+
+
+def test_an_arm_that_stopped_early_is_refused():
+    """run.meta says how many days were ASKED for. A run killed at day 14 still
+    carries days=30, and diffing it against a complete arm reads as a 57%
+    collapse in trips caused by the camera — which is how this guard was found."""
+    problem = pair_problem(_arm(last_day=13), _arm(scenes=0, last_day=29))
+    assert problem and "stopped early" in problem
 
 
 def test_the_off_arm_must_actually_have_the_camera_off():
