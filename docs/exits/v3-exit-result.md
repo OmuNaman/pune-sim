@@ -181,6 +181,43 @@ shows a **1,244× ratio** on this entirely healthy run, which is what selection
 bias looks like when the camera is pointed at the households where things
 happen.
 
+### V1-a — a rumour propagates, mutates and changes behaviour in 3 days
+
+```
+punesim run --days 4 --block oldcity --households 12000 --seed 108 \
+  --scenes --k 5 --follow hh:1160 --hazards \
+  --inject data/scenarios/oldcity_v1_exam.json --db runs/exit/v1/events.db
+```
+
+939,920 events, hash `d75e51b9…`. **PASS**, with room to spare. One false claim
+— *"the water at Tulshibaug Mandir is contaminated"*, `veracity: false`,
+credence 0.85 — injected into **two** people on day 0:
+
+| | |
+|---|---|
+| propagates | **1,176 distinct people**, 1,405 hearings, max hop **24** |
+| mutates | **71 distinct texts**, 4,261 mutation ops |
+| changes behaviour | **301 non-seed people** acted (`store_water`), first on day 1 |
+
+The non-seed exclusion is not optional. Injected credence 0.85 already clears
+the `store_water` threshold of 0.6, so the two seeds act on day 0 *by
+construction*; counting them would let the clause pass itself. Only people who
+were **told** count. (And `store_water` is not in `AVOIDING_ACTIONS`, so this
+claim never produces a `plan.avoided` — looking for one would fail a healthy
+run.)
+
+A false claim reorganising 301 households' behaviour is the info lane's whole
+thesis, demonstrated rather than asserted.
+
+**Texture defect noticed here, not a clause failure.** The `REATTRIBUTE`
+operator invents somebody to blame and picks a real nearby place, but has no
+notion of which institutions could plausibly be responsible for the claim's
+topic. Alongside credible targets (*"people are blaming Faraskhana Police
+Station"*, *"…Sant Dnyaneswar Medical Education Research Centre"*) it produced
+*"people are blaming **Blackberrys**"* — a menswear shop — and *"…IDBI Bank"*.
+Real rumours about contaminated water blame the municipality, the tanker
+operator or the temple trust. Logged rather than fixed mid-exit.
+
 ### V0-f — refusal behaviour on identity-salient content
 
 `uv run python scripts/refusal_probe.py` — **PASS**. Twenty tier-1-style briefs
