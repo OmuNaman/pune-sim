@@ -121,6 +121,14 @@ def rewind(log, seq: int) -> int:
     con = log._conn  # noqa: SLF001 — the kernel owns writes; this is crash recovery
     n = con.execute("SELECT count(*) FROM event WHERE seq > ?", (seq,)).fetchone()[0]
     if n:
+        # A day at 12,000 households is ~230,000 rows, and deleting that many
+        # with the branch/type index to maintain takes minutes at V3 scale. It
+        # used to do it in silence, so a resume looked like a hung process
+        # sitting at 34 MB — I spent a while diagnosing exactly that. Say what
+        # is happening, and say it before starting rather than after.
+        print(f"checkpoint: rolling back {n:,} row(s) from the interrupted day "
+              f"(this is a large delete at V3 scale; it can take minutes)...",
+              flush=True)
         con.execute("DELETE FROM event WHERE seq > ?", (seq,))
         con.commit()
     return n
