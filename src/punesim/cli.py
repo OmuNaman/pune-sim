@@ -188,6 +188,10 @@ def follow(
         p = block.get(pid)
         return p.name if p and p.name else pid
 
+    def _name(pid: str) -> str:
+        q = people.get(pid if ":" in (pid or "") else f"person:{pid}")
+        return q.name if q else (pid or "someone")
+
     console.print(
         f"[bold]{person.name}[/bold] ({person.age}, {person.occupation}) — "
         f"household {person.household_id}, home {place_name(person.home_id)}"
@@ -211,6 +215,18 @@ def follow(
             console.print(f"  {t}  arrives at {place_name(e.payload['at'])}")
         elif e.type == "activity.start":
             console.print(f"  {t}  {e.payload['activity']} at {place_name(e.payload['at'])}")
+        elif e.type == "info.heard":
+            # The one lane a person spends most of their day in, and it printed
+            # as a wall of raw JSON in the view this project calls text-first.
+            p = e.payload
+            ch = p.get("channel", "?")
+            src = p.get("source", "")
+            who = "with their own eyes" if ch == "witness" else f"from {_name(src)}"
+            hop = p.get("claim", {}).get("hop", 0)
+            console.print(
+                f'  {t}  hears {who} ({ch}, hop {hop}, credence '
+                f'{p.get("credence", 0):.2f}): "{p.get("claim", {}).get("text", "")}"'
+            )
         else:
             console.print(f"  {t}  {e.type} {e.payload}")
 
