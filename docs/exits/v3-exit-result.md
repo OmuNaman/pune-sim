@@ -76,11 +76,42 @@ People moved, and one of those moves is the whole point.
 
 Both now use `person:1160.3` — Suhas Thorat, 10, who actually attends the anchor
 school, whose household has the two adults the school-call and the FIR
-complainant need, and whose `p_financial` goes **0.544 → 0.721** on the bill.
+complainant need, and whose `p_financial` goes **0.544 → 0.761** on the bill.
+
+*(A static day-0 calculation of that figure gives 0.721, and I used it to
+"correct" the plan's 0.761 before the run. The plan was right and the shortcut
+was wrong: by discharge day the household has also spent three days of costs, so
+the arithmetic has to be run forward rather than evaluated at time zero. The
+direction — crosses vs does not cross — was never in doubt either way.)*
 
 ## The clauses
 
-*(filled in from the runs below)*
+### The V0 run
+
+```
+punesim run --days 5 --block oldcity --households 12000 --seed 108 \
+  --scenes --k 5 --follow hh:1160 --hazards \
+  --inject data/scenarios/oldcity_school_bus_crash.json --db runs/exit/v0/events.db
+```
+
+**1,170,254 events over 5 sim-days. 49,578 people. Hash `c69e43df…`.**
+`scripts/exit_check.py --db runs/exit/v0/events.db --household hh:1160` →
+**6 pass, 0 fail, 3 not decidable here.**
+
+| clause | verdict | evidence |
+|---|---|---|
+| **V0-a** consequences fire on schedule | PASS | off the injected collision: `condition.set` +300s, `ambulance.dispatched` +480s, `message.sent` +1200s (the school calls home), `hospital.admitted` +1500s, `police.fir.registered` +99,600s. Exact to the second — these are arithmetic in `engine/reactions.py`, not draws, so anything else is a regression |
+| **V0-b** the family's scenes reference it for days | PASS | `hh:1160`'s scenes mention the collision on days 1, 2 **and** 3 |
+| **V0-c** a gossip hop reaches neighbours | PASS | 25,561 f2f hearings reaching 19,604 people, max hop 26; 2,677 household hearings; **28,229 hearings by someone outside `hh:1160`** on a non-witness channel |
+| **V1-b** a random hazard produces an un-injected ripple | PASS | a clockwork `hazard.fire.small` on day 1, 563 percepts — the plan computed days 1/7/9/14 for seed 108 from the realize gate before the run, and day 1 is where it landed |
+| **V1-d** cost | PASS | **$0.0042/sim-day**, 55 calls, against $1 (V1) and $2 (V3) |
+| **V2-a** crash → FIR + bill → p_financial → a scene after | PASS | FIR day 2, victim `person:1160.3`, complainant `person:1160.0`; discharge day 3 with a **₹21,800** bill; `money.paid` day 3; **both** adults cross `p_financial` at **0.761** on day 3; scenes follow on day 4 |
+| **V1-a** rumour propagates/mutates/acts | SKIP | no rumour in this run — decided on the `v1_exam` run |
+| **V0-d, V0-f, V1-c** | UNJUDGED | model judgements; see below |
+
+The V2-a row is the one worth pausing on. It is the clause that would have
+silently no-showed with the original participant, and the difference between the
+two is a household's bank balance.
 
 ## What this test cannot show
 
