@@ -275,7 +275,7 @@ def v1d_cost(log: Log) -> Clause:
     return c.say("PASS" if per < 1.0 else "FAIL", *lines)
 
 
-def v2a_the_chain(log: Log, household: str) -> Clause:
+def v2a_the_chain(log: Log, household: str, hh_of: dict) -> Clause:
     c = Clause("V2-a", "crash -> FIR + bill -> p_financial -> a scene after")
     def pick(kind: str, pred=lambda p: True):
         return [(t // DAY, p) for _s, t, _ty, p, _c, _pr in log.rows("AND type=?", (kind,))
@@ -283,8 +283,12 @@ def v2a_the_chain(log: Log, household: str) -> Clause:
     fir = pick("police.fir.registered")
     disc = pick("hospital.discharged", lambda p: p.get("household") == household)
     paid = pick("money.paid", lambda p: p.get("household") == household)
+    # Resolved through the roster, never by string prefix: at 12,000 households
+    # "person:1160" is a prefix of "person:11600", so a startswith test on hh:1160
+    # silently counts hh:11600's crossings as this family's. The bug only exists
+    # above 1,000 households, which is to say only where this test runs.
     crossed = pick("pressure.crossed", lambda p: p.get("pressure") == "p_financial"
-                   and str(p.get("person", "")).startswith(household.replace("hh:", "person:")))
+                   and hh_of.get(p.get("person")) == household)
     scenes = {d for d, _p in pick("scene.morning", lambda p: p.get("household") == household)}
     lines = [
         f"FIR         : {[(d, p.get('victim'), p.get('complainant')) for d, p in fir] or 'none'}",
@@ -331,7 +335,7 @@ def main() -> int:
         v0c_gossip_reaches_neighbours(log, args.household, hh_of),
         v1b_random_hazard_ripples(log),
         v1d_cost(log),
-        v2a_the_chain(log, args.household),
+        v2a_the_chain(log, args.household, hh_of),
         v1a_rumour_lives(log, args.claim, set(args.seeds.split(","))),
         Clause("V0-d", "the day-3 interview matches canon").say(
             "UNJUDGED", "decided by scripts/continuity_read.py's judge + skeptic, not here"),
