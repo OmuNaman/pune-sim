@@ -355,6 +355,35 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   validated against the individual model. That is a soak-and-compare piece of
   work, not an optimisation.
 
+  **And the obvious aggregate is known to be wrong for this model
+  (2026-08-10).** "A per-claim exposure count" is a first-order mean-field
+  approximation, and the info lane is Maki-Thompson with a forgetting term —
+  `STIFLE_P = 0.3` plus `e^(-age/FRESHNESS_TAU_DAYS)` — which is precisely the
+  variant [Ferraz de Arruda et al., *Nature Communications* 13:3049
+  (2022)](https://www.nature.com/articles/s41467-022-30683-z) studied. Their
+  result is that the model has a second-order phase transition **that
+  first-order mean-field does not capture**: mean-field says a rumour always
+  reaches some fraction of the population, and the true stochastic dynamics say
+  it dies below a critical spreading rate. Worse for us, the subcritical regime
+  has rumour lifespan diverging as a *power law* as the rate falls — long-lived
+  rumours that mean-field cannot see.
+
+  Rumour death is not a detail here; it is the thing the info lane exists to
+  get right, and this repo has already shipped one immortal rumour (freshness
+  keyed to the teller, 40% of the city, sixteen days) and built
+  `RUMOR-IMMORTAL` to catch it. A mean-field cohort would put that failure mode
+  back *in the representation*, where no probe watching individual holdings can
+  see it. The V3 soak's claims reached 3,425–17,537 of 49,578 people and all
+  died — a partial-reach regime, which is exactly where the transition lives
+  rather than safely away from it.
+
+  So the cohort design starts one rung up, at a pair approximation or better —
+  something that keeps the correlation between who has heard and who they meet,
+  since that correlation is what mean-field discards and what the transition is
+  made of. And the soak-and-compare must gate on the **lifespan and reach
+  distribution per claim**, not on mean reach: matching the average is exactly
+  what a mean-field approximation does while getting the dynamics wrong.
+
   **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
   distinguishes a childless couple from an empty nest; a fourth (literacy or the
   age bands) would pin it. Hazard rates are absolute rather than per-capita and
