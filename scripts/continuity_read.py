@@ -416,12 +416,17 @@ def main() -> int:
             print(f"     {u}")
         print()
     if not canon_hits:
+        verdict = "PASS" if not unread else "PARTIAL"
         head = ("VERDICT: PASS — no canon contradictions." if not unread
                 else "VERDICT: PARTIAL — no canon contradictions in the batches read.")
+        if refuted:
+            head += (f"  ({len(refuted)} first-pass finding(s) refuted by the skeptic; "
+                     f"see the JSON for why.)")
         if texture:
             head += f"  ({len(texture)} texture nit(s) below; the log is silent on those.)"
         print(head + "\n")
     else:
+        verdict = "FAIL"
         print(
             f"VERDICT: FAIL — {len(canon_hits)} canon contradictions ({len(major)} major)"
             + (f", plus {len(texture)} texture nit(s)" if texture else "") + "\n"
@@ -437,8 +442,21 @@ def main() -> int:
     if args.out:
         args.out.write_text(
             orjson.dumps(
+                # The verdict and the findings must agree in the file, not only
+                # on the console. This used to dump the RAW first-pass findings
+                # under one key called "findings", so a run whose skeptic
+                # refuted everything wrote PASS to stdout and three "major
+                # canon" contradictions to the artifact that docs/soaks/README
+                # says exists "so the numbers in the prose can be checked rather
+                # than trusted". Whoever read the JSON later would have read the
+                # opposite of the result.
                 {"household": args.household, "db": str(args.db),
-                 "scenes": len(scenes), "findings": [f.model_dump() for f in findings],
+                 "scenes": len(scenes), "verdict": verdict,
+                 "canon_contradictions": [f.model_dump() for f in canon_hits],
+                 "refuted_by_skeptic": [{**f.model_dump(), "refuted_because": why}
+                                        for f, why in refuted],
+                 "texture": [f.model_dump() for f in texture],
+                 "batches_unread": unread,
                  "notes": notes},
                 option=orjson.OPT_INDENT_2,
             ).decode(),
