@@ -112,9 +112,49 @@ computing power first.
 
 ## Run 2 — with the 30-day soak scenario injected
 
-*Running: `data/scenarios/soak_30d.json`, which lands a collision on day 5 and a
-fraud rumour on day 12 — the scenario that produced 510 outcome events in
-soak2. Results here when it lands.*
+Same 30 days, 80 households, seed 108, kasba — plus
+`data/scenarios/soak_30d.json`, a collision on day 5 and a fraud rumour on day
+12, so there are outcomes to count.
+
+| | with scenes | without |
+|---|---|---|
+| events | 43,388 | 42,624 |
+| scene-lane events | 979 (149 morning scenes, 1 reaction) | 0 |
+| clockwork events | 42,409 | 42,623 (**−0.50%**) |
+| trips | 16,290 | 16,445 (**−155**) |
+| `activity.start` | 8,535 | 8,424 (**+111**) |
+| `info.heard` | 1,258 | 1,273 |
+
+**The dose is real.** The camera removed 155 trips and put 111 more activities
+in their place — scenes revising a household's plans and keeping somebody in —
+and the info lane diverged with it, 15 hearings fewer.
+
+**The response is exactly zero.**
+
+| kind | with | without | p |
+|---|---:|---:|---:|
+| `pressure.crossed` | 1 | 1 | 1.000 |
+| `belief.action` | 13 | 13 | 1.000 |
+| `hospital.admitted` | 1 | 1 | 1.000 |
+| `hospital.discharged` | 1 | 1 | 1.000 |
+| `money.paid` | 1 | 1 | 1.000 |
+| **all** | **17** | **17** | **1.000** |
+
+Per household: 0 worse under the camera, 0 better, 9 unchanged.
+
+Not "no significant difference" — *identical, in every category*. The scene lane
+moved 155 trips and did not move a single mechanical consequence.
+
+**And the honest limit, printed by the tool rather than reasoned about
+afterwards:** with 34 outcome events across both arms, the smallest split this
+pair could have called is 25/9 — a **2.78× ratio**. Anything subtler is
+invisible here. So this is "no observer effect above 2.8×", not "no observer
+effect".
+
+That is still worth having. The failure mode the architecture is worried about —
+*watching a family turns their life into a soap opera* — is not a 20% effect. It
+would be families on camera getting visibly more misfortune, and at this power
+that would have shown.
 
 ## What this cannot show
 
