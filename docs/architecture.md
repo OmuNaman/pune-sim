@@ -384,6 +384,37 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   distribution per claim**, not on mean reach: matching the average is exactly
   what a mean-field approximation does while getting the dynamics wrong.
 
+  **The exit test (2026-08-10).** The cost half of V3's exit was met; the other
+  half — *"V0's scenario re-runs unchanged on 4 real peths / 12k households"* —
+  had never been run, and a read-only survey found it **could not have been**.
+  Four blockers, none of which raise: `interview`, `follow`, `continuity_read`
+  and `branch` each rebuilt the population from their own defaults rather than
+  the log's `run.meta`, and `hh:000` exists in every world this repo can
+  synthesize, so each one answered confidently about the wrong 306 people.
+  `world_card` emitted one line per person — 2.3 MB at 12k — so `punesim
+  compile` could not run at all. And `continuity_read` filed the interview
+  answer as *canon*, so the check for "the interview matches canon" was treating
+  the interview as the truth. See [exits/v3-exit-plan.md](exits/v3-exit-plan.md)
+  and [exits/v3-exit-result.md](exits/v3-exit-result.md).
+
+  The port itself is small — kasba's 124 named places are a strict subset of
+  oldcity's 438, so only the mandal moved — but the *people* had to be
+  re-grounded, and one of those re-groundings is the whole point: the original
+  30-day participant's household absorbs a ₹21,200 hospital bill without
+  crossing its pressure threshold (0.120 → 0.164), so V2's exit chain stops one
+  link short while every probe passes. A green run testing nothing.
+
+  On the ported scenario at 12,000 households: **1,170,254 events over 5
+  sim-days, 6 mechanical clauses pass, 0 fail**, the standing audit reports 0
+  FAIL over 31 probes, replay is hash-identical (`c69e43df…`) with zero API
+  calls, the interview matches canon under a judge plus skeptic, and the whole
+  V2 chain fires — FIR, bill, both parents crossing `p_financial` at 0.761, a
+  scene the day after. $0.0042/sim-day.
+
+  `tests/test_oldcity_pin.py` now pins this world the way `SOAKED_HASH` pins
+  V0's, and covers what that one cannot: routing, claim transmission, belief →
+  action and the hospital procedure, in 0.6 seconds.
+
   **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
   distinguishes a childless couple from an empty nest; a fourth (literacy or the
   age bands) would pin it. Hazard rates are absolute rather than per-capita and
