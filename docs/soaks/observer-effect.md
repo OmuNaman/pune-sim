@@ -37,6 +37,25 @@ So `audit_run.probe_observer_effect` is **INFO**: descriptive, never a verdict,
 with the confound in its own docstring and the expected count printed beside
 every ratio.
 
+**The first V3-scale run to carry the probe settled the argument.** 5 sim-days,
+12,000 households, 39 on camera:
+
+```
+pressure.crossed   watched 1.769/hh (69 ev, 0.1 expected)   unwatched 0.001/hh (17 ev)   x1244.81
+hospital.admitted  watched 0.026/hh ( 1 ev, 0.0 expected)   unwatched 0.000/hh ( 0 ev)   x—
+```
+
+**A 1,244× ratio on a healthy run**, with every other probe passing. Nothing is
+wrong: the injected collision put a child in hospital, the bill crossed his
+parents' financial pressure, and `scene.reaction` fires *on* `pressure.crossed`
+— so the family was pulled on camera by the very event the watched column then
+attributes to being on camera. The expected-count column is what makes it
+legible: 69 events against an expectation of 0.1.
+
+Any threshold at all would have fired here. This is the probe's own subject
+matter — an instrument that changes what it measures — and it was the instrument
+that was broken.
+
 There is a second reason nobody caught this earlier. **Below V3 scale there is
 no control group at all.** The scene budget reaches every household inside a
 month: soak2 and soak3 are both *80 on camera, 0 off*. The probe can only ever
