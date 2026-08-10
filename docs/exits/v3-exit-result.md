@@ -113,6 +113,55 @@ The V2-a row is the one worth pausing on. It is the clause that would have
 silently no-showed with the original participant, and the difference between the
 two is a household's bank balance.
 
+### V0-e — replay is hash-identical with zero API calls
+
+**PASS.** The same five days re-run with `PUNESIM_LLM=replay` into a different
+database:
+
+```
+record  c69e43df60b07e538a36a3081941c817a26700ab793ec492ded86ab7c7900fe8
+replay  c69e43df60b07e538a36a3081941c817a26700ab793ec492ded86ab7c7900fe8
+```
+
+1,170,254 events both times. "Zero API calls" is enforced by the mode rather
+than inspected — a cassette miss raises `CassetteMiss` and the run dies — so a
+completed replay *is* the proof. This is V0's headline clause, holding at 49,578
+people.
+
+### V0-d — the interview matches canon
+
+**PASS**, and it is the clause that was both unrunnable and unjudgeable this
+morning: `punesim interview` would have answered as somebody from a different
+world and written it into the log, and `continuity_read` would have filed the
+answer as *canon* rather than judging it.
+
+Asked *"Kaay zaala tya divshi shaaleh javar? Tumchya mulaa baddal saanga"*,
+Suhas's father says:
+
+> *Arre, tya divshi... Friday hota na. School madhun call aala, Ratanben
+> Chunilal Mehta school madhun. Mhanje, Suhas la accident jhala mhanun. Mi
+> ghabarlo, lagech dispensary la dhavlo. Suhas cha ankle la lagla hota, pan
+> doctors mhanale ki kahi serious nahi... Mi tya divshi kaam var nahi gelo.*
+
+Every load-bearing detail is in the log: it was a Friday, the school called home
+(`message.sent`, +1200s off the collision), the ankle injury (`condition.set`,
++300s), the dispensary (`hospital.admitted`, +1500s), and the day of work lost.
+The judge's own verdict:
+
+> Omkar's interview recollection aligns perfectly with the canon: the accident
+> on Friday, the school call, rushing to the dispensary, and his worry. No
+> contradictions with the event log.
+
+`VERDICT: PASS — no canon contradictions`, over 7 scenes in 2 batches. Three
+first-pass findings were raised and all three refuted by the independent
+skeptic, each for the documented reason that canon is silent on the point
+("severity 0.3 after discharge does not rule out a limp"). Raw output:
+`runs/exit/v0/continuity.json`.
+
+*Caveat kept from the plan: `interview.py` speaks from the end of the log, so on
+a 5-day run this is a **day-4** interview, not the day-3 one V0's exit names.
+There is no flag to move it.*
+
 ### The standing audit on the same run
 
 `scripts/audit_run.py --db runs/exit/v0/events.db --seed 108 --households 12000`
