@@ -113,6 +113,25 @@ The V2-a row is the one worth pausing on. It is the clause that would have
 silently no-showed with the original participant, and the difference between the
 two is a household's bank balance.
 
+### The standing audit on the same run
+
+`scripts/audit_run.py --db runs/exit/v0/events.db --seed 108 --households 12000`
+— unwindowed, so `n_days` is trustworthy and none of the windowing caveats
+apply.
+
+**31 probes: 23 pass, 5 warn, 0 fail, 2 skip, 1 report-only.**
+
+The five warns are all known classes: `ACTIVITY-VOCAB` (free-text activities a
+whitelist cannot match), `ID-HONORIFIC` (a minor addressed as *tai*/*kaka*),
+`ID-REJECTED` (one invented "bank helpline"), `INFO-WITNESS-HEARSAY` (counts
+opportunities, not corruption) and one `TEMPORAL-DRIFT`.
+
+The report-only `OBSERVER-EFFECT` table is worth reading as an object lesson and
+is written up in [../soaks/observer-effect.md](../soaks/observer-effect.md): it
+shows a **1,244× ratio** on this entirely healthy run, which is what selection
+bias looks like when the camera is pointed at the households where things
+happen.
+
 ### V0-f — refusal behaviour on identity-salient content
 
 `uv run python scripts/refusal_probe.py` — **PASS**. Twenty tier-1-style briefs
