@@ -56,6 +56,10 @@ LATE_HEARER_DAYS = 12
 LATE_HEARER_FLOOR = 40    # below this it is a handful of people, at any scale
 LATE_HEARER_SHARE = 0.01  # ...and above it, still 1% of everyone it ever reached
 
+# Below this many downstream outcomes there is no comparison to make between
+# watched and unwatched households, and saying so is the honest answer.
+MIN_OUTCOMES_TO_COMPARE = 30
+
 CLOCKWORK_ACTIVITIES = {"work", "driving_rounds", "school", "errand", "admitted"}
 ABSENCE_WORDS = re.compile(
     r"\b(home|rest|sick|stay|stays|shelter|hospital|admitted|bed|ill|unwell|indoors|ghar)\b", re.IGNORECASE
@@ -108,7 +112,7 @@ class Event:
 @dataclass
 class Result:
     probe: str
-    status: str  # PASS | WARN | FAIL | SKIP
+    status: str  # PASS | WARN | FAIL | SKIP | INFO (descriptive, never a verdict)
     headline: str
     hits: list[str] = field(default_factory=list)
 
@@ -655,6 +659,108 @@ class Audit:
             leftovers[:20],
         )
 
+    def probe_observer_effect(self) -> None:
+        """How do outcomes differ between the households a run put on camera
+        and the ones it did not? Descriptive only — it never passes or fails.
+
+        The architecture lists this as a cross-cutting policy and nothing has
+        ever checked it: "monitor incident-rate divergence between watched and
+        unwatched populations; prompt-level bias correction so watching a
+        family doesn't turn their life into a soap opera." It matters here more
+        than most places, because following someone IS the product — an
+        instrument that changes what it measures is worse than no instrument.
+
+        The channel is real and not hypothetical: a scene may revise a
+        household's plans, a revised plan can keep an earner home, a missed day
+        costs a daily wage, and the wage feeds financial pressure. Hazards
+        cannot see attention — they are keyed per class per day — so what is
+        compared here is the *downstream* rates.
+
+        **This split cannot answer the question, and the reason it cannot is
+        worth keeping in front of whoever reads the table.** Being on camera is
+        not assigned at random: `scene.reaction` fires *on* the notable events
+        counted below, so a household that gets admitted to hospital earns a
+        reaction scene and then contributes its own admission to the watched
+        column; and the morning gate scores households by how much is happening
+        to them, which is its whole job. Watched and unwatched rates would
+        diverge here with the observer effect at exactly zero. The camera
+        chases the action and this probe cannot tell that apart from the camera
+        causing it.
+
+        So no threshold. The instrument that *can* answer it is a paired run —
+        same seed, scenes on and off, diff the same households across the two —
+        because assignment is then by run rather than by attention, and the
+        keyed six-tuple makes the clockwork lane draw-for-draw identical across
+        the pair. `scripts/observer_effect.py`; result in
+        docs/soaks/observer-effect.md. This table stays because at V3 scale it
+        is the cheap standing check that the two populations have not drifted
+        somewhere the paired run never looked.
+        """
+        on_camera = {
+            e.payload.get("household") for e in self.by_type.get("scene.morning", ())
+        } | {e.payload.get("household") for e in self.by_type.get("scene.reaction", ())}
+        on_camera.discard(None)
+        if not on_camera:
+            self.add("OBSERVER-EFFECT", "SKIP", "no scenes in this run")
+            return
+        all_hh = {h.id for h in self.households}
+        off_camera = all_hh - on_camera
+        if len(on_camera) < 5 or len(off_camera) < 5:
+            # The usual outcome below V3 scale: the scene budget reaches every
+            # household inside a month, so there is no unwatched population to
+            # compare against. 80 households over 30 days is 80 on camera and 0
+            # off. Which is why this went unmeasured for so long.
+            self.add("OBSERVER-EFFECT", "SKIP",
+                     f"{len(on_camera)} on camera, {len(off_camera)} off — no control group "
+                     f"(the scene budget reaches everyone at this size; see observer-effect.md)")
+            return
+
+        watched: Counter = Counter()
+        unwatched: Counter = Counter()
+        kinds = ("pressure.crossed", "belief.action", "plan.avoided",
+                 "hospital.admitted", "loan.taken", "money.paid")
+        for kind in kinds:
+            for e in self.by_type.get(kind, ()):
+                pid = e.payload.get("person")
+                hid = e.payload.get("household") or self.hh_of.get(self.norm_id(pid))
+                if hid is None:
+                    continue
+                (watched if hid in on_camera else unwatched)[kind] += 1
+
+        # "Nothing happened to anybody" is not a finding. Twenty households on
+        # camera for twenty quiet days produce a table of zeros, and printing
+        # it as though it said something is the same mistake as an INFO-ECHO
+        # that passed because there was no lineage to look at.
+        total = sum(watched.values()) + sum(unwatched.values())
+        if total < MIN_OUTCOMES_TO_COMPARE:
+            self.add("OBSERVER-EFFECT", "SKIP",
+                     f"only {total} outcome events across both groups "
+                     f"(need {MIN_OUTCOMES_TO_COMPARE}) — nothing to compare")
+            return
+
+        rows = []
+        for kind in kinds:
+            w = watched[kind] / len(on_camera)
+            u = unwatched[kind] / len(off_camera)
+            if w == u == 0:
+                continue
+            ratio = f"x{w / u:.2f}" if u else "x—"
+            # How many watched-group events the unwatched rate predicts. Print
+            # it: with 14 households on camera out of 12,000 a "2x divergence"
+            # is routinely one event against an expectation of half of one, and
+            # the ratio column alone hides that.
+            expected = u * len(on_camera)
+            rows.append(
+                f"{kind:<18} watched {w:6.3f}/hh ({watched[kind]:>5} ev, {expected:6.1f} expected)"
+                f"   unwatched {u:6.3f}/hh ({unwatched[kind]:>6} ev)   {ratio}"
+            )
+        self.add(
+            "OBSERVER-EFFECT", "INFO",
+            f"{len(on_camera)} households on camera, {len(off_camera)} not — rates below are "
+            f"confounded by selection, not a verdict (see docstring)",
+            rows,
+        )
+
     def probe_talk(self) -> None:
         """Does anyone in this block ever talk to someone from another house?
         The first soak's answer was no, across 30 days and 306 people."""
@@ -779,6 +885,7 @@ class Audit:
         self.probe_belief_actions()
         self.probe_memory_time()
         self.probe_talk()
+        self.probe_observer_effect()
         self.probe_cost()
         self.probe_temporal_drift()
         self.probe_prompt_hygiene()
@@ -972,7 +1079,7 @@ def main() -> int:
                   followed=followed)
     audit.run()
 
-    order = {"FAIL": 0, "WARN": 1, "SKIP": 2, "PASS": 3}
+    order = {"FAIL": 0, "WARN": 1, "INFO": 2, "SKIP": 3, "PASS": 4}
     results = sorted(audit.results, key=lambda r: (order[r.status], r.probe))
     print(f"\n=== audit {args.db} ===")
     print(
@@ -989,7 +1096,9 @@ def main() -> int:
         print(f"{r.status:5s} {r.probe:24s} {r.headline}")
     fails = [r for r in results if r.status == "FAIL"]
     warns = [r for r in results if r.status == "WARN"]
-    detail = [r for r in results if r.status in ("FAIL", "WARN") and r.hits]
+    # INFO prints its detail too: an INFO probe's whole content is its table,
+    # so suppressing the hits would leave a headline saying nothing.
+    detail = [r for r in results if r.status in ("FAIL", "WARN", "INFO") and r.hits]
     if detail:
         print("\n--- detail ---")
         for r in detail:
@@ -1001,7 +1110,8 @@ def main() -> int:
     print(
         f"\n{len(results)} probes: {sum(1 for r in results if r.status == 'PASS')} pass, "
         f"{len(warns)} warn, {len(fails)} fail, "
-        f"{sum(1 for r in results if r.status == 'SKIP')} skip"
+        f"{sum(1 for r in results if r.status == 'SKIP')} skip, "
+        f"{sum(1 for r in results if r.status == 'INFO')} report-only"
     )
     if fails:
         return 1
