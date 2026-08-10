@@ -129,7 +129,24 @@ def world_card(block: Block, people: dict[str, Person]) -> str:
     return "\n".join(lines)
 
 
-def _validate(spec: InjectionSpec, block: Block, people: dict[str, Person], max_day: int) -> list[str]:
+def _places_named_in(text: str, block: Block) -> list:
+    """Every place whose full name appears verbatim in `text`.
+
+    Short names are skipped: a block containing a place called "Hotel" would
+    otherwise match half the sentences anyone writes."""
+    low = " ".join(text.lower().split())
+    out = []
+    for p in block.places:
+        name = " ".join((p.name or "").lower().split())
+        if len(name) >= 8 and name in low:
+            out.append(p)
+    return out
+
+
+def _validate(
+    spec: InjectionSpec, block: Block, people: dict[str, Person], max_day: int,
+    text: str = "",
+) -> list[str]:
     errors: list[str] = []
     if not 0 <= spec.day <= max_day:
         errors.append(f"day {spec.day} outside run range 0..{max_day}")
@@ -144,6 +161,24 @@ def _validate(spec: InjectionSpec, block: Block, people: dict[str, Person], max_
     if spec.place_ref is not None and block.get(spec.place_ref) is None:
         sugg = _closest_places(spec.place_ref, block)
         errors.append(f"place_ref '{spec.place_ref}' does not exist; closest real places: {sugg}")
+    elif spec.place_ref is not None and text:
+        # An id that EXISTS is not thereby the right one. Asked to place an
+        # attack "near Shaniwar Peth Police Chowki", the model returned
+        # place:node/3337848242 and called it the chowki in its own notes; the
+        # chowki is ...241 and ...242 is Shaniwar Veer Maruti Mandir. One digit,
+        # a valid id, a different building, and nothing caught it — the
+        # injection would have committed at the wrong place with a preview that
+        # named the right one. Fires only when the operator's text names a place
+        # outright and the model chose none of the ones it named, so a location
+        # described rather than named never trips it.
+        named = _places_named_in(text, block)
+        if named and all(p.id != spec.place_ref for p in named):
+            got = block.get(spec.place_ref)
+            errors.append(
+                f"place_ref '{spec.place_ref}' is {got.name!r}, but the text names "
+                + " / ".join(f"{p.name!r} ({p.id})" for p in named)
+                + " — use the id of the place the text actually names"
+            )
     for pid in spec.participants:
         if pid not in people:
             sugg = _closest_people(pid, people)
@@ -231,7 +266,7 @@ def compile_injection(
     msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
     res = gateway.call("compile", msgs, InjectionSpec, temperature=0.1, max_tokens=1200)
     spec: InjectionSpec = res.parsed
-    errors = _validate(spec, block, people, max_day)
+    errors = _validate(spec, block, people, max_day, text)
     if errors:
         repair = (
             f"{card}\n\nYour previous compilation:\n{spec.model_dump_json()}\n\n"
@@ -244,7 +279,7 @@ def compile_injection(
             InjectionSpec, temperature=0.1, max_tokens=1200,
         )
         spec = res.parsed
-        errors = _validate(spec, block, people, max_day)
+        errors = _validate(spec, block, people, max_day, text)
         if errors:
             raise CompileError(errors, spec)
     inj = _to_injection(spec, block)

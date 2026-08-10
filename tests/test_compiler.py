@@ -135,3 +135,36 @@ def test_novel_public_event_ripples_without_new_code(tmp_path, world):
     # and it travelled beyond direct witnesses
     hop1 = [e for e in heard if e.payload["claim"]["key"].startswith("cl:assassination") and e.payload["claim"]["hop"] >= 1]
     assert hop1, "the news never left the eyewitnesses"
+
+
+def test_a_valid_id_for_the_wrong_place_is_caught(tmp_path, world):
+    """An id that EXISTS is not thereby the right one.
+
+    Asked to place an attack "near Shaniwar Peth Police Chowki", the model
+    returned place:node/3337848242 — one digit off the chowki's ...241, a real
+    id, a different building — and said in its own notes that it was the
+    chowki. Validation only checked existence, so it passed: the injection would
+    have committed at the wrong place behind a preview naming the right one.
+    """
+    block, _, people = world
+    named, other = [p for p in block.places if p.name and len(p.name) >= 8][:2]
+    t = ScriptedTransport([_spec(place_ref=other.id), _spec(place_ref=named.id)])
+    out = compile_injection(
+        _gw(tmp_path, t), block, people, f"a stabbing outside {named.name} at noon"
+    )
+    assert out.injection.place == named.id
+    assert named.name in t.prompts[1] and named.id in t.prompts[1]
+    assert other.name in t.prompts[1]  # and what it wrongly chose
+
+
+def test_a_place_that_is_described_rather_than_named_does_not_trip_it(tmp_path, world):
+    """The check must stay quiet when the operator names no place at all,
+    or every free-text injection about "the temple down the road" fails."""
+    block, _, people = world
+    place = next(p for p in block.places if p.name and len(p.name) >= 8)
+    t = ScriptedTransport([_spec(place_ref=place.id)])
+    out = compile_injection(
+        _gw(tmp_path, t), block, people, "a scooter hit a dog near the big temple"
+    )
+    assert out.injection.place == place.id
+    assert len(t.prompts) == 1  # no repair round
