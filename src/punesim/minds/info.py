@@ -735,11 +735,58 @@ class BeliefAction:
     caused_by: int | None
 
 
-def crossed_actions(state: InfoState, prior_acted: set[tuple[str, str]]) -> list[BeliefAction]:
-    """People whose credence crossed a claim family's action threshold.
-    Fires once per (person, claim_key) — hysteresis V1-thin."""
+# How near a place has to be to your front door before news about it is news
+# about your life. Ten minutes on foot — the radius within which people in a
+# peth actually draw water, shop and send children.
+IN_MY_WORLD_WALK_S = 600
+
+
+def _in_my_world(person: Person, subject: str, block: Block) -> bool:
+    """Is this place part of this person's life at all?
+
+    The missing half of belief -> action. Credence answers "do I think this is
+    true"; it does not answer "does it have anything to do with me". Those were
+    the same question here, and they are not the same question anywhere else: I
+    am completely certain there was a fire in another peth last week and it
+    changes nothing about my Tuesday. Real people hold hundreds of confident
+    beliefs they act on in no way at all, because the belief has to be about a
+    place they actually go before it can change where they go.
+
+    Leaving them fused had a visible cost. Witness credence is 0.95, which
+    clears every threshold in ACTION_THRESHOLDS, so *seeing* anything meant
+    *doing* something about it — and a claim about a tap on the far side of the
+    block turned people who had never been near it into water-hoarders. It is
+    also why `avoid_place` was so often vacuous: you cannot stop going somewhere
+    you never went.
+
+    So: your home, your workplace or school, or somewhere inside a short walk of
+    your door. Deliberately not "have you ever been there" — that would need the
+    log, and a belief is about where your life *is*, not where you happened to
+    pass once.
+    """
+    if not subject:
+        return False
+    if subject in (person.home_id, person.work_id):
+        return True
+    return any(p.id == subject for p in block.nearby(person.home_id, IN_MY_WORLD_WALK_S))
+
+
+def crossed_actions(
+    state: InfoState,
+    prior_acted: set[tuple[str, str]],
+    people: dict[str, Person] | None = None,
+    block: Block | None = None,
+) -> list[BeliefAction]:
+    """People whose credence crossed a claim family's action threshold AND for
+    whom the place is somewhere in their own life.
+    Fires once per (person, claim_key) — hysteresis V1-thin.
+
+    `people`/`block` are optional so that the many small tests which build an
+    InfoState by hand keep working; when they are absent the proximity question
+    cannot be asked and every believer acts, which is the old behaviour."""
     out: list[BeliefAction] = []
     for pid in sorted(state.holdings):
+        person = people.get(pid) if people else None
         for key in sorted(state.holdings[pid]):
             if (pid, key) in prior_acted:
                 continue
@@ -753,6 +800,11 @@ def crossed_actions(state: InfoState, prior_acted: set[tuple[str, str]]) -> list
             if mapped is None:  # nothing designed; nothing mechanical happens
                 continue
             action, threshold = mapped
-            if h.credence >= threshold:
-                out.append(BeliefAction(pid, key, action, h.claim.subject, h.last_seq or None))
+            if h.credence < threshold:
+                continue
+            if person is not None and block is not None and not _in_my_world(
+                person, h.claim.subject, block
+            ):
+                continue  # believed, remembered, repeated — and none of my business
+            out.append(BeliefAction(pid, key, action, h.claim.subject, h.last_seq or None))
     return out

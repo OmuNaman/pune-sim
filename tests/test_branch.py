@@ -55,11 +55,20 @@ def test_run_meta_and_reconstruction(tmp_path, world):
 def test_branch_shares_prefix_and_diverges_at_the_what_if(tmp_path, world):
     block, _hhs, people = world
     src, _ = _source(tmp_path, world)
+    # The rumour has to be about a tap in the seeded family's OWN street. A
+    # claim now moves somebody only if its subject is somewhere in their life,
+    # so a contaminated well on the far side of the block is believed, repeated
+    # and correctly changes nobody's day — which would make this test assert
+    # that branching does nothing.
+    seeded = people[min(people)]
+    near = block.nearby(seeded.home_id, 600)
+    assert near, "no named place within ten minutes of the seeded family's door"
+    subject = near[0].id
     rumor = engine.Injection(
-        day=1, time_s=10 * 3600, type="info.rumor", place=block.places[0].id,
-        participants=(min(people),),
+        day=1, time_s=10 * 3600, type="info.rumor", place=subject,
+        participants=(seeded.id,),
         payload={"credence": 0.85, "claim": {
-            "key": "cl:whatif", "subject": block.places[0].id,
+            "key": "cl:whatif", "subject": subject,
             "predicate": "contaminated", "topics": ["water"], "charge": 0.8,
         }},
     )

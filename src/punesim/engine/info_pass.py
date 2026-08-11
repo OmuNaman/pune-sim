@@ -153,7 +153,7 @@ def _info_pass(
     )
 
     marks: dict[str, str] = {}
-    for act in info_mod.crossed_actions(state.info, state.acted):
+    for act in info_mod.crossed_actions(state.info, state.acted, people, block):
         state.acted.add((act.person, act.claim_key))
         holding = state.info.holdings[act.person][act.claim_key]
         seq = log.commit(

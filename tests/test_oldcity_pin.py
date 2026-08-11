@@ -56,13 +56,34 @@ SCHOOL = "place:node/3681735096"   # Ratanben Chunilal Mehta (RCM) Gujarati High
 # blamed for and are now 5, twelve of its texts named a culprit and five do,
 # and its three 03:00 conversations are gone. If a future change moves the
 # lane counts too, that is a different kind of change and needs its own reason.
-PINNED_HASH = "3b68ca6e428a2cf7f7d57072bee6ae1e173f48b285e0ca710dc13291e3e02f8e"
-PINNED_EVENTS = 11824
-PINNED_LANES = {"info.heard": 487, "belief.action": 4, "hospital.admitted": 1}
+# Re-pinned again 2026-08-11, from 3b68ca6e…, for the belief -> action change:
+# a claim now moves somebody only if its subject is somewhere in that person's
+# own life (their home, their work or school, or a ten-minute walk from their
+# door), because credence answers "is this true" and never answered "does this
+# concern me". The seeds in `_injections` had to move with it — two arbitrary
+# adults four peths away believe the rumour, repeat it, and correctly change
+# nothing, which would have left this pin covering an empty lane.
+#
+# info.heard 487 -> 484 and events 11,824 -> 11,821: the three lost hearings are
+# the seeds' own neighbours, who differ because the seeds themselves differ.
+# belief.action stays 4 — the same number of people act, they are just people
+# for whom the tap is theirs.
+PINNED_HASH = "c71c77bcaa609aeae2b34e9899777b52526e646c255aa4c2fe99e0f437b43e24"
+PINNED_EVENTS = 11821
+PINNED_LANES = {"info.heard": 484, "belief.action": 4, "hospital.admitted": 1}
 
 
-def _injections(people) -> list:
-    adults = sorted(p.id for p in people.values() if p.age >= 18)[:2]
+def _injections(people, block) -> list:
+    # The seeds must LIVE near the tap, or this pin stops exercising the lane it
+    # exists to cover. Since belief -> action asks whether the place is in your
+    # life at all, a rumour seeded into two arbitrary adults on the far side of
+    # four peths is true, is repeated, and changes nobody's day — which is
+    # correct behaviour and a useless pin.
+    from punesim.minds.info import _in_my_world
+
+    adults = sorted(p.id for p in people.values()
+                    if p.age >= 18 and _in_my_world(p, WATER, block))[:2]
+    assert len(adults) == 2, f"only {len(adults)} adult(s) live near {WATER}"
     kid = sorted(p.id for p in people.values() if p.occupation == "student")[0]
     return [
         engine.Injection.parse({
@@ -87,7 +108,7 @@ def run(tmp_path_factory):
     log = EventLog(tmp_path_factory.mktemp("oldcity") / "events.db")
     n, _state = engine.run_simulation(
         log, SEED, block, hhs, people, days=DAYS, block_name="oldcity",
-        hazards=False, injections=_injections(people),
+        hazards=False, injections=_injections(people, block),
     )
     lanes = {k: sum(1 for _ in log.events(type=k)) for k in PINNED_LANES}
     out = {"events": n, "hash": log.determinism_hash(), "lanes": lanes,

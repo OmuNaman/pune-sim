@@ -355,7 +355,24 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   validated against the individual model. That is a soak-and-compare piece of
   work, not an optimisation.
 
-  **And the obvious aggregate is known to be wrong for this model
+  **Cohorts are cut (2026-08-11, owner's decision).** Every person stays fully
+  simulated, living their own life, at every scale this project reaches. The
+  reason cohorts existed was cost, and the cost turned out not to bite: 49,578
+  people at full fidelity run a sim-month in under an hour at **$0.0075/sim-day**
+  against a $2 bar. Paying for a second, approximate representation of a person
+  — plus the machinery to materialise and demote them, plus a soak-and-compare
+  to prove the approximation faithful — buys nothing the exit needed, and it
+  trades away the one property the whole project is for: that you can follow
+  *anyone*, and they were always really there.
+
+  If the 3.5M path ever makes this bite again, the answer to reach for first is
+  making a person cheaper, not making some people fictional.
+
+  The analysis below is kept because it is why the shortcut would not have
+  worked anyway, and because the same trap waits for anyone who tries to
+  aggregate this info lane later.
+
+  **The obvious aggregate was known to be wrong for this model
   (2026-08-10).** "A per-claim exposure count" is a first-order mean-field
   approximation, and the info lane is Maki-Thompson with a forgetting term —
   `STIFLE_P = 0.3` plus `e^(-age/FRESHNESS_TAU_DAYS)` — which is precisely the
