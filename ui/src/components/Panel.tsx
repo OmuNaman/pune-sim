@@ -1,16 +1,18 @@
 import type { ReactNode } from 'react'
 
 export function Panel({
-  children, className = '', title, right, plain = false,
+  children, className = '', title, right, plain = false, onClick,
 }: {
   children: ReactNode
   className?: string
   title?: ReactNode
   right?: ReactNode
   plain?: boolean
+  onClick?: (e: React.MouseEvent) => void
 }) {
   return (
-    <div className={`panel grain ${plain ? 'panel-plain' : ''} ${className}`}>
+    <div className={`panel grain ${plain ? 'panel-plain' : ''} ${className}`}
+         onClick={onClick}>
       {title !== undefined && (
         <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-1.5
                         border-b border-[var(--color-line)]">

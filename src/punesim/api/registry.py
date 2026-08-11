@@ -54,6 +54,9 @@ class RunRecord:
     day_done: int = -1  # last completed day; -1 = nothing yet
     status: str = "created"  # created|stopped|finished|error (live states live in the manager)
     error: str = ""
+    # Injections accepted while nothing was computing; handed to the worker on
+    # the next play, which is the same door the CLI's --inject uses.
+    pending_injections: list = field(default_factory=list)
 
     @property
     def checkpoint(self) -> Path:

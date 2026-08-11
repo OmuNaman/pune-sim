@@ -10,12 +10,15 @@ import { TopBar } from './panels/TopBar'
 import { TimelineStrip } from './panels/TimelineStrip'
 import { LeftRail } from './panels/LeftRail'
 import { Inspector } from './panels/Inspector'
+import { RunControl } from './features/RunControl'
+import { NewRun } from './features/NewRun'
 import { Panel } from './components/Panel'
 import { Logo } from './components/Logo'
 
 export default function App() {
   const [runId, setRunId] = useState<string | null>(null)
   const [t, setT] = useState(0)
+  const [newRun, setNewRun] = useState(false)
 
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
@@ -117,11 +120,16 @@ export default function App() {
     <div className="relative w-full h-full">
       <MapRoot meta={m} />
       <TopBar meta={m} people={people} runs={runs.data.runs.filter((r) => r.days_done > 0)}
-              onPickRun={setRunId} />
+              onPickRun={setRunId} onNewRun={() => setNewRun(true)} />
       <LeftRail runId={m.id} t={t} />
       <Inspector runId={m.id} t={t} order={roster.data?.order} />
+      <RunControl meta={m} />
       {days.data && <TimelineStrip meta={m} days={days.data} />}
       {!roster.data && <Waking households={m.households} />}
+      {newRun && (
+        <NewRun onClose={() => setNewRun(false)}
+                onCreated={(id) => { void runs.refetch(); setRunId(id) }} />
+      )}
     </div>
   )
 }

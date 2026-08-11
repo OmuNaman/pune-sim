@@ -1,5 +1,52 @@
 export type RunStatus =
-  | 'created' | 'running' | 'paused' | 'stopped' | 'finished' | 'error'
+  | 'created' | 'building' | 'starting' | 'running' | 'pausing' | 'paused'
+  | 'stopping' | 'stopped' | 'finished' | 'error' | 'resuming' | 'resumed'
+
+/** What the worker process is doing right now. Empty for a run nobody is computing. */
+export interface LiveStatus {
+  run_id?: string
+  status?: RunStatus
+  /** Last COMPLETED day, or null before the first one lands. */
+  day?: number | null
+  days?: number
+  detail?: string
+  error?: string
+  events?: number
+  last_seq?: number
+  /** Wall seconds the last day took — the honest cost of one more. */
+  last_day_wall?: number | null
+  alive?: boolean
+  seq?: number
+}
+
+export interface WorkerMessage {
+  kind: 'status' | 'day' | 'inject' | 'finished' | 'stopped' | 'error'
+  _seq: number
+  [k: string]: unknown
+}
+
+export interface NewRunBody {
+  name?: string
+  block: string
+  households: number
+  days: number
+  seed?: number | null
+  hazards: boolean
+  scenes: boolean
+  k?: number
+  follow?: string[]
+  autostart?: boolean
+}
+
+export interface InjectionBody {
+  day: number
+  time: string
+  type: string
+  place?: string | null
+  participants?: string[]
+  severity?: number | null
+  payload?: Record<string, unknown>
+}
 
 export interface RunSummary {
   id: string

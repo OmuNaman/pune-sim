@@ -14,3 +14,4 @@ dist/
 runs/**/*.stats.json
 ui/node_modules/
 ui/dist/
+runs/managed/

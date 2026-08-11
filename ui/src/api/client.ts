@@ -1,6 +1,7 @@
 import type {
-  DaySummary, EventLine, Frame, PersonDossier, PersonRow, PlaceDetail, PlaceRow,
-  RunMeta, RunSummary,
+  DaySummary, EventLine, Frame, InjectionBody, LiveStatus, NewRunBody,
+  PersonDossier, PersonRow, PlaceDetail, PlaceRow, RunMeta, RunSummary,
+  WorkerMessage,
 } from './types'
 
 async function json<T>(url: string): Promise<T> {
@@ -9,9 +10,36 @@ async function json<T>(url: string): Promise<T> {
   return r.json() as Promise<T>
 }
 
+async function post<T>(url: string, body?: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const data = await r.json().catch(() => ({}))
+  // The API says WHY in `detail` — "day 3 has already been computed", "branch
+  // it to get one that can". Losing that and showing a status code instead is
+  // how a UI turns a good explanation into a shrug.
+  if (!r.ok) throw new Error((data as any)?.detail ?? `${r.status} ${r.statusText}`)
+  return data as T
+}
+
 export const api = {
   runs: () => json<{ runs: RunSummary[] }>('/api/runs'),
   meta: (id: string) => json<RunMeta>(`/api/runs/${id}/meta`),
+
+  create: (body: NewRunBody) => post<{ id: string; live: LiveStatus }>('/api/runs', body),
+  play: (id: string) => post<LiveStatus>(`/api/runs/${id}/play`),
+  pause: (id: string) => post<LiveStatus>(`/api/runs/${id}/pause`),
+  step: (id: string, days = 1) => post<LiveStatus>(`/api/runs/${id}/step?days=${days}`),
+  stopRun: (id: string, force = false) =>
+    post<LiveStatus>(`/api/runs/${id}/stop?force=${force}`),
+  inject: (id: string, body: InjectionBody) =>
+    post<{ queued: boolean; live: boolean; day: number }>(`/api/runs/${id}/inject`, body),
+
+  workerEvents: (id: string, since = 0) =>
+    json<{ status: LiveStatus; messages: WorkerMessage[] }>(
+      `/api/runs/${id}/events?since=${since}`),
 
   roster: (id: string) =>
     json<{ order: string[]; names: string[] }>(`/api/runs/${id}/roster`),

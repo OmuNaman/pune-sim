@@ -14,13 +14,14 @@ const SPEEDS = [
 ]
 
 export function TopBar({
-  meta, people, runs, onPickRun,
+  meta, people, runs, onPickRun, onNewRun,
 }: {
   meta: RunMeta
   /** From the roster once it exists; meta.people is 0 until then. */
   people: number
   runs: RunSummary[]
   onPickRun: (id: string) => void
+  onNewRun: () => void
 }) {
   const [t, setT] = useState(clock.t)
   const [playing, setPlaying] = useState(clock.playing)
@@ -68,6 +69,7 @@ export function TopBar({
           </option>
         ))}
       </select>
+      <StampButton onClick={onNewRun} title="make a new world">+ new</StampButton>
 
       <div className="h-8 w-px bg-[var(--color-line)]" />
 
