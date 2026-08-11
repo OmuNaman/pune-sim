@@ -38,6 +38,43 @@ export interface NewRunBody {
   autostart?: boolean
 }
 
+export interface ComparePerson {
+  id: string
+  name: string
+  age: number
+  sex: string
+  occupation: string
+  religion: string
+  household: string
+  home_name: string
+  work_name: string
+}
+
+export interface HeldClaim {
+  text: string
+  hop: number
+  credence: number | null
+  hm: string
+  source: string | null
+  ops: string[]
+}
+
+export interface CompareReport {
+  day: number
+  a: ComparePerson
+  b: ComparePerson
+  same_household: boolean
+  crossings: {
+    place: string; place_name: string; t0: number; t1: number
+    minutes: number; hm: string
+    a_doing: string | null; b_doing: string | null
+  }[]
+  /** The same claim as each of them holds it — often not the same words. */
+  shared_claims: { key: string; a: HeldClaim; b: HeldClaim; same_words: boolean }[]
+  only_a: number
+  only_b: number
+}
+
 export interface TroubleHazard {
   seq: number
   t: number

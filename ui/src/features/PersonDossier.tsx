@@ -11,6 +11,8 @@ export function PersonDossier({ runId, personId, t }: {
 }) {
   const day = Math.floor(t / DAY_S)
   const select = useSelection((s) => s.select)
+  const pinned = useSelection((s) => s.pinned)
+  const pin = useSelection((s) => s.pin)
   const q = useQuery({
     queryKey: ['person', runId, personId, day],
     queryFn: () => api.person(runId, personId, day),
@@ -125,8 +127,21 @@ export function PersonDossier({ runId, personId, t }: {
       )}
 
       <Section label="">
-        <div className="px-3 pb-3 flex gap-1.5">
+        <div className="px-3 pb-3 flex gap-1.5 items-center">
           <StampButton onClick={() => select({ kind: 'none' })}>close</StampButton>
+          {pinned === p.id ? (
+            <StampButton on onClick={() => pin(null)}>pinned</StampButton>
+          ) : (
+            <StampButton onClick={() => pin(p.id)}
+                         title="pin this person, then open another to compare">
+              {pinned ? '+ compare' : 'pin to compare'}
+            </StampButton>
+          )}
+          {pinned && pinned !== p.id && (
+            <span className="text-[10px] text-[var(--color-ink-faint)]">
+              vs the pinned one
+            </span>
+          )}
         </div>
       </Section>
     </Panel>

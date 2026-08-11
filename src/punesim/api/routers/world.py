@@ -260,6 +260,92 @@ def geo(request: Request, run_id: str, layer: str):
     )
 
 
+@router.get("/{run_id}/compare")
+def compare(request: Request, run_id: str, a: str, b: str, day: int = 0):
+    """Two lives, side by side — and where they touch.
+
+    The interesting column is the middle one. Two people in a city of fifty
+    thousand mostly never meet, and when they do it is at a place at a time; and
+    when they have both heard the same rumour they have usually heard DIFFERENT
+    WORDS for it, at different credences, through different mouths. That drift
+    is the thing this simulation is for, and it is invisible until you put two
+    people next to each other.
+    """
+    _rec, w = _world(request, run_id)
+    pa, pb = w.people.get(a), w.people.get(b)
+    if pa is None or pb is None:
+        raise HTTPException(404, "unknown person")
+
+    # Where each was, through this day, from the same movement the map uses.
+    segs = w.view.segs_for_day(day)
+    sa = [s for s in segs.get(a, []) if s.kind == "at"]
+    sb = [s for s in segs.get(b, []) if s.kind == "at"]
+
+    crossings = []
+    for x in sa:
+        for y in sb:
+            if x.a != y.a:
+                continue
+            lo, hi = max(x.t0, y.t0), min(x.t1 if x.t1 > 0 else x.t0,
+                                          y.t1 if y.t1 > 0 else y.t0)
+            if hi - lo < 300:   # under a tick together is passing, not meeting
+                continue
+            crossings.append({
+                "place": x.a, "place_name": w.place_names.get(x.a, x.a),
+                "t0": lo, "t1": hi, "minutes": (hi - lo) // 60,
+                "hm": to_datetime(lo).strftime("%H:%M"),
+                "a_doing": x.activity, "b_doing": y.activity,
+            })
+    crossings.sort(key=lambda c: c["t0"])
+
+    # The same claim, as each of them holds it.
+    def heard(pid: str) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for e in w.view.for_person(pid, ("info.heard",), limit=400):
+            if e.payload.get("person") != pid:
+                continue
+            c = e.payload.get("claim", {})
+            key = e.payload.get("claim_key") or c.get("key")
+            if not key:
+                continue
+            out[key] = {
+                "text": c.get("text", ""), "hop": c.get("hop", 0),
+                "credence": e.payload.get("credence"),
+                "hm": to_datetime(e.sim_time).strftime("%a %H:%M"),
+                "source": w.person_names.get(e.payload.get("source"),
+                                             e.payload.get("source")),
+                "ops": c.get("ops", []),
+            }
+        return out
+
+    ha, hb = heard(a), heard(b)
+    shared = [
+        {"key": k, "a": ha[k], "b": hb[k],
+         "same_words": ha[k]["text"] == hb[k]["text"]}
+        for k in ha.keys() & hb.keys()
+    ]
+    shared.sort(key=lambda s: (s["same_words"], s["key"]))
+
+    def card(p) -> dict:
+        return {
+            "id": p.id, "name": p.name, "age": p.age, "sex": p.sex,
+            "occupation": p.occupation, "religion": p.religion,
+            "household": p.household_id,
+            "home_name": w.place_names.get(p.home_id, "home"),
+            "work_name": w.place_names.get(p.work_id, ""),
+        }
+
+    return {
+        "day": day,
+        "a": card(pa), "b": card(pb),
+        "same_household": pa.household_id == pb.household_id,
+        "crossings": crossings,
+        "shared_claims": shared,
+        "only_a": len(ha.keys() - hb.keys()),
+        "only_b": len(hb.keys() - ha.keys()),
+    }
+
+
 @router.get("/{run_id}/places")
 def places_early(request: Request, run_id: str):
     """Named places — also from the block alone, for the same reason as geo."""

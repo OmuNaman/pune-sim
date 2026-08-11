@@ -9,14 +9,19 @@ export type Selection =
 
 interface SelectionState {
   sel: Selection
+  /** The person pinned for comparison, if any. */
+  pinned: string | null
   select: (s: Selection) => void
   clear: () => void
+  pin: (id: string | null) => void
 }
 
 export const useSelection = create<SelectionState>((set) => ({
   sel: { kind: 'none' },
+  pinned: null,
   select: (sel) => set({ sel }),
   clear: () => set({ sel: { kind: 'none' } }),
+  pin: (pinned) => set({ pinned }),
 }))
 
 // A handle for ui/scripts — clicking a specific building on a WebGL canvas from

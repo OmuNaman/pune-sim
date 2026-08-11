@@ -16,6 +16,8 @@ import { NewRun } from './features/NewRun'
 import { BranchHere } from './features/BranchHere'
 import { Timelines } from './features/Timelines'
 import { RumourBoard } from './features/RumourBoard'
+import { Compare } from './features/Compare'
+import { useSelection } from './stores/selection'
 import { Panel } from './components/Panel'
 import { Logo } from './components/Logo'
 
@@ -26,6 +28,8 @@ export default function App() {
   const [branching, setBranching] = useState(false)
   const [timelines, setTimelines] = useState(false)
   const [rumours, setRumours] = useState(false)
+  const sel = useSelection((s) => s.sel)
+  const pinned = useSelection((s) => s.pinned)
 
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
@@ -151,6 +155,11 @@ export default function App() {
                    onOpen={(id) => { setRunId(id); setTimelines(false) }} />
       )}
       {rumours && <RumourBoard runId={m.id} onClose={() => setRumours(false)} />}
+      {/* Two people are pinned against each other: show the comparison. */}
+      {pinned && sel.kind === 'person' && sel.id !== pinned && (
+        <Compare runId={m.id} a={pinned} b={sel.id} day={Math.floor(t / DAY_S)}
+                 onClose={() => useSelection.getState().pin(null)} />
+      )}
     </div>
   )
 }
