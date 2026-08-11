@@ -203,6 +203,75 @@ def rumors(request: Request, run_id: str):
     return out
 
 
+@router.get("/{run_id}/trouble")
+def trouble(request: Request, run_id: str, day: int):
+    """Where the day went wrong, and where the news of it travelled.
+
+    Two shapes, one call, because the map draws both and asking twice would
+    fetch the same day twice. Hazards are points in time and space; hops are
+    the arcs between the person who knew and the person who now knows, which is
+    the only part of this simulation that is genuinely about the geography of
+    talk rather than the geography of walking.
+    """
+    _rec, w = _world(request, run_id)
+    lo, hi = day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY
+
+    hazards = []
+    for e in w.view.of_type(*[t for t in w.view.types()
+                              if t.startswith(("hazard.", "unrest.", "crowd.",
+                                               "police.", "curfew."))],
+                            limit=4000, day=day):
+        pl = w.block.get(e.payload.get("place") or "")
+        if pl is None:
+            continue
+        h = humanize(e, w.person_names, w.place_names)
+        hazards.append({
+            "seq": e.seq, "t": e.sim_time, "type": e.type,
+            "hm": to_datetime(e.sim_time).strftime("%H:%M"),
+            "lat": pl.lat, "lon": pl.lon, "place": pl.id, "place_name": pl.name,
+            "severity": e.payload.get("severity"),
+            "text": h["text"],
+        })
+
+    # A hop needs both ends placed, and where somebody IS at a given moment is
+    # the day's movement — which is already built and cached for the map.
+    segs = w.view.segs_for_day(day)
+
+    def where(pid: str, t: int):
+        best = None
+        for s in segs.get(pid, ()):
+            if s.t0 <= t and (s.t1 == -1 or t < s.t1):
+                best = s
+        pl = w.block.get(best.a if best else (w.people[pid].home_id
+                                              if pid in w.people else ""))
+        return (pl.lat, pl.lon) if pl else None
+
+    hops = []
+    for e in w.view.of_type("info.heard", limit=20_000, day=day):
+        pl = e.payload
+        src, dst = pl.get("source"), pl.get("person")
+        if not src or not dst or src in ("origin", "witness"):
+            continue
+        a, b = where(src, e.sim_time), where(dst, e.sim_time)
+        if not a or not b:
+            continue
+        # Two people talking face to face are AT THE SAME PLACE — that is what a
+        # conversation is. Dropping same-place hops as degenerate threw away
+        # every f2f hop in the run and left only the impossible ones. A zero
+        # length arc is drawn as a ring instead.
+        hops.append({
+            "t": e.sim_time, "from": [a[1], a[0]], "to": [b[1], b[0]],
+            "same_place": a == b,
+            "credence": pl.get("credence"), "key": pl.get("claim_key"),
+            "channel": pl.get("channel"),
+        })
+        if len(hops) >= 2000:   # a busy day at V3 scale is tens of thousands
+            break
+
+    return {"day": day, "hazards": hazards, "hops": hops,
+            "hops_truncated": len(hops) >= 2000}
+
+
 @router.get("/{run_id}/days")
 def days(request: Request, run_id: str):
     """Per-day event counts by type, for the timeline ribbon.

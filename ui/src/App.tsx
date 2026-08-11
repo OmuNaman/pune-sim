@@ -15,6 +15,7 @@ import { RunControl } from './features/RunControl'
 import { NewRun } from './features/NewRun'
 import { BranchHere } from './features/BranchHere'
 import { Timelines } from './features/Timelines'
+import { RumourBoard } from './features/RumourBoard'
 import { Panel } from './components/Panel'
 import { Logo } from './components/Logo'
 
@@ -24,6 +25,7 @@ export default function App() {
   const [newRun, setNewRun] = useState(false)
   const [branching, setBranching] = useState(false)
   const [timelines, setTimelines] = useState(false)
+  const [rumours, setRumours] = useState(false)
 
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
@@ -127,7 +129,8 @@ export default function App() {
       <TopBar meta={m} people={people} runs={runs.data.runs.filter((r) => r.days_done > 0)}
               onPickRun={setRunId} onNewRun={() => setNewRun(true)}
               onBranch={() => setBranching(true)}
-              onTimelines={() => setTimelines(true)} />
+              onTimelines={() => setTimelines(true)}
+              onRumours={() => setRumours(true)} />
       <LeftRail runId={m.id} t={t} />
       <Inspector runId={m.id} t={t} order={roster.data?.order} />
       <RunControl meta={m} />
@@ -147,6 +150,7 @@ export default function App() {
         <Timelines current={m.id} onClose={() => setTimelines(false)}
                    onOpen={(id) => { setRunId(id); setTimelines(false) }} />
       )}
+      {rumours && <RumourBoard runId={m.id} onClose={() => setRumours(false)} />}
     </div>
   )
 }

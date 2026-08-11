@@ -17,8 +17,8 @@ import { ScreenGridLayer } from '@deck.gl/aggregation-layers'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 import { api } from '../api/client'
-import type { PlaceRow, RunMeta } from '../api/types'
-import { clock } from '../clock/engine'
+import type { PlaceRow, RunMeta, TroubleDay, TroubleHazard, TroubleHop } from '../api/types'
+import { clock, DAY_S } from '../clock/engine'
 import { geoLayers, paperStyle } from './paperStyle'
 import { useSelection } from '../stores/selection'
 
@@ -59,6 +59,8 @@ export function MapRoot({ meta }: { meta: RunMeta }) {
   const zoomRef = useRef(14)
   const versionRef = useRef(0)
   const colourRef = useRef(new Uint8Array(0))
+  const troubleRef = useRef<TroubleDay | null>(null)
+  const troubleDayRef = useRef(-1)
   const select = useSelection((s) => s.select)
 
   /** Packed RGBA, rebuilt in place from the clock's activity codes. */
@@ -120,6 +122,55 @@ export function MapRoot({ meta }: { meta: RunMeta }) {
         gpuAggregation: true,
         opacity: 0.7,
       }))
+    }
+
+    // Trouble, and the talk about it. Hazards are rings that swell for the
+    // half hour after they happen; hearings are small green marks wherever
+    // somebody was told something. In this sim news moves by two people being
+    // in the same room — measured, on a day where every one of 118 hops was
+    // same-place — so gossip is a glow on a spot, not an arc across the map.
+    const trouble = troubleRef.current
+    if (trouble) {
+      const now = clock.t
+      const fresh = trouble.hazards.filter((h) => now >= h.t && now - h.t < 5400)
+      if (fresh.length) {
+        layers.push(new ScatterplotLayer({
+          id: 'hazard-rings',
+          data: fresh,
+          getPosition: (h: TroubleHazard) => [h.lon, h.lat],
+          // The ring grows as the news of it spreads, then fades.
+          getRadius: (h: TroubleHazard) => 14 + ((now - h.t) / 5400) * 70,
+          radiusUnits: 'pixels',
+          filled: false,
+          stroked: true,
+          getLineColor: (h: TroubleHazard) => [
+            ...(h.type.startsWith('hazard.water') ? [37, 99, 201]
+              : h.type.startsWith('hazard.power') ? [183, 135, 8]
+              : [192, 48, 40]),
+            Math.round(210 * (1 - (now - h.t) / 5400)),
+          ] as [number, number, number, number],
+          lineWidthUnits: 'pixels',
+          getLineWidth: 2,
+          updateTriggers: { getRadius: now, getLineColor: now },
+          pickable: true,
+          onClick: (info: any) => info.object
+            && select({ kind: 'place', id: info.object.place }),
+        }))
+      }
+      const talk = trouble.hops.filter((h) => now >= h.t && now - h.t < 1800)
+      if (talk.length) {
+        layers.push(new ScatterplotLayer({
+          id: 'talk',
+          data: talk,
+          getPosition: (h: TroubleHop) => h.to,
+          getRadius: 5,
+          radiusUnits: 'pixels',
+          filled: true,
+          getFillColor: (h: TroubleHop) =>
+            [30, 143, 90, Math.round(190 * (1 - (now - h.t) / 1800))],
+          updateTriggers: { getFillColor: now },
+        }))
+      }
     }
 
     if (placesRef.current.length && zoomRef.current >= 15.4) {
@@ -225,7 +276,20 @@ export function MapRoot({ meta }: { meta: RunMeta }) {
     })
 
     map.on('zoom', () => { zoomRef.current = map.getZoom(); redraw() })
-    const unsub = clock.subscribe(() => redraw())
+
+    // The day's trouble, fetched when the playhead crosses midnight. Not a
+    // React query, because this feeds the render loop rather than a panel and
+    // must not put React in the 60fps path.
+    const unsub = clock.subscribe((now) => {
+      const d = Math.floor(now / DAY_S)
+      if (d !== troubleDayRef.current) {
+        troubleDayRef.current = d
+        api.trouble(meta.id, d)
+          .then((t) => { if (troubleDayRef.current === d) { troubleRef.current = t; redraw() } })
+          .catch(() => { troubleRef.current = null })
+      }
+      redraw()
+    })
 
     return () => {
       unsub()

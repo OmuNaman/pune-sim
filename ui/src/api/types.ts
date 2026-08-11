@@ -38,6 +38,65 @@ export interface NewRunBody {
   autostart?: boolean
 }
 
+export interface TroubleHazard {
+  seq: number
+  t: number
+  type: string
+  hm: string
+  lat: number
+  lon: number
+  place: string
+  place_name: string
+  severity: number | null
+  text: string
+}
+
+export interface TroubleHop {
+  t: number
+  from: [number, number]
+  to: [number, number]
+  /** True when both people were in the same room — which is most of them. */
+  same_place: boolean
+  credence: number | null
+  key: string | null
+  channel: string
+}
+
+export interface TroubleDay {
+  day: number
+  hazards: TroubleHazard[]
+  hops: TroubleHop[]
+  hops_truncated: boolean
+}
+
+export interface Rumour {
+  key: string
+  origin_type: string | null
+  origin_prov: string
+  /** true | false | unknown — what the sim knows, not what anyone believes. */
+  veracity: string
+  subject_id: string | null
+  subject: string
+  /** The drift ladder: each distinct wording, with the hop it appeared at. */
+  variants: { text: string; hop: number; ops: string[]; first_hm: string }[]
+  by_day: { day: number; n: number }[]
+  actions: {
+    hm: string; person_id: string; person: string
+    action: string; place_id: string | null; place: string
+  }[]
+  spread: {
+    t: number; hm: string; person_id: string; person: string
+    source_id: string | null; source: string | null
+    channel: string; credence: number | null; hop: number
+    /** The mouths it came through, oldest first. */
+    chain: string[]
+  }[]
+  spread_truncated: boolean
+  reach: number
+  believers: number
+  first_hm: string
+}
+
 export interface BranchBody {
   name?: string
   what_if?: string

@@ -1,7 +1,7 @@
 import type {
   BranchBody, BranchResult, DaySummary, DiffReport, EventLine, Frame,
   InjectionBody, LiveStatus, NewRunBody, PersonDossier, PersonRow, PlaceDetail,
-  PlaceRow, RunMeta, RunSummary, WorkerMessage,
+  PlaceRow, RunMeta, RunSummary, Rumour, TroubleDay, WorkerMessage,
 } from './types'
 
 async function json<T>(url: string): Promise<T> {
@@ -40,6 +40,11 @@ export const api = {
   workerEvents: (id: string, since = 0) =>
     json<{ status: LiveStatus; messages: WorkerMessage[] }>(
       `/api/runs/${id}/events?since=${since}`),
+
+  rumors: (id: string) => json<Rumour[]>(`/api/runs/${id}/rumors`),
+
+  trouble: (id: string, day: number) =>
+    json<TroubleDay>(`/api/runs/${id}/trouble?day=${day}`),
 
   branch: (id: string, body: BranchBody) =>
     post<BranchResult>(`/api/runs/${id}/branch`, body),

@@ -14,7 +14,7 @@ const SPEEDS = [
 ]
 
 export function TopBar({
-  meta, people, runs, onPickRun, onNewRun, onBranch, onTimelines,
+  meta, people, runs, onPickRun, onNewRun, onBranch, onTimelines, onRumours,
 }: {
   meta: RunMeta
   /** From the roster once it exists; meta.people is 0 until then. */
@@ -24,6 +24,7 @@ export function TopBar({
   onNewRun: () => void
   onBranch: () => void
   onTimelines: () => void
+  onRumours: () => void
 }) {
   const [t, setT] = useState(clock.t)
   const [playing, setPlaying] = useState(clock.playing)
@@ -77,6 +78,9 @@ export function TopBar({
       </StampButton>
       <StampButton onClick={onTimelines} title="all the worlds and how they forked">
         ⎇ timelines
+      </StampButton>
+      <StampButton onClick={onRumours} title="what the city is saying">
+        ◈ rumours
       </StampButton>
 
       <div className="h-8 w-px bg-[var(--color-line)]" />
