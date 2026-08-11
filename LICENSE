@@ -1,163 +1,76 @@
-PROPRIETARY SOFTWARE — ALL RIGHTS RESERVED
+BSD Zero Clause License (0BSD)
 
-Copyright (c) 2026 Naman (github.com/OmuNaman). All rights reserved.
+Copyright (c) 2026 Naman (github.com/OmuNaman)
 
-This software, source code, data, assets and accompanying documentation
-(collectively, the "Work") are made publicly visible for reading and review
-only. No licence, express or implied, by estoppel, exhaustion, acquiescence or
-otherwise, is granted to any party. Public visibility is not publication into
-the public domain, is not a waiver of any right, and is not an offer to
-licence.
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
 
---------------------------------------------------------------------------------
-1. DEFINITIONS
---------------------------------------------------------------------------------
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
 
-1.1  "Rightsholder" means the copyright holder named above.
-1.2  "Work" has the meaning given above and EXCLUDES the third-party material
-     identified in Clause 6.
-1.3  "You" means any natural or legal person accessing the Work.
-1.4  "TDM" means text and data mining, being any automated analytical technique
-     applied to the Work to analyse it in digital form so as to generate
-     information, including but not limited to patterns, trends, correlations,
-     embeddings, weights or model parameters.
 
---------------------------------------------------------------------------------
-2. RESERVATION OF RIGHTS
---------------------------------------------------------------------------------
+================================================================================
+NOTICES — these impose NO conditions on you
+================================================================================
 
-2.1  All right, title and interest in the Work, including all copyright and
-     related rights, vests in and is retained by the Rightsholder.
-2.2  All rights are reserved under the Copyright Act, 1957 (India), the Berne
-     Convention for the Protection of Literary and Artistic Works, the TRIPS
-     Agreement, and the copyright law of every jurisdiction in which the Work is
-     protected.
-2.3  No right is granted by implication, and no course of conduct, silence, or
-     failure to enforce shall constitute a licence or a waiver.
+The licence above is the whole licence. Everything below is information, not
+obligation. You do not have to keep this file, credit anyone, or ask permission.
+Attribution is welcome and is not required.
 
---------------------------------------------------------------------------------
-3. EXPRESS PROHIBITIONS
+
+1. THIRD-PARTY DATA UNDER `data/anchors/`
 --------------------------------------------------------------------------------
 
-WITHOUT THE PRIOR EXPRESS WRITTEN PERMISSION OF THE RIGHTSHOLDER, YOU MAY NOT:
+The 0BSD grant above covers this project's own code, documentation and
+configuration. It cannot and does not relicense third-party material vendored
+under `data/anchors/`, which stays under its originators' terms. Sources and
+checksums are catalogued in `data/anchors/MANIFEST.md`:
 
-3.1  Use, execute, run, host or deploy the Work, in whole or in part, for any
-     purpose whatsoever, whether commercial, non-commercial, academic, research,
-     evaluative or personal;
-3.2  Copy, reproduce, publish, mirror, redistribute, transmit or frame the Work,
-     save as permitted by Clause 5;
-3.3  Modify, transform, adapt, translate, decompile, or create derivative works
-     from the Work;
-3.4  Incorporate, embed, bundle or link any part of the Work into any other
-     work, product, software, database, dataset, model or service;
-3.5  Subject the Work, or any portion of it, to TDM, or use it to train,
-     fine-tune, pre-train, distil, align, evaluate, benchmark, ground, index or
-     retrieve against any machine learning model, artificial intelligence
-     system, large language model, generative system or retrieval-augmented
-     generation corpus;
-3.6  Sublicense, sell, rent, lease, assign, pledge or otherwise transfer any
-     right in or to the Work;
-3.7  Remove, alter, obscure or falsify this notice, any copyright notice, or any
-     attribution contained in the Work.
+  - OpenStreetMap extracts (`*_places.geojson`, `*_roads.geojson`,
+    `osm_*_raw.json`) — (c) OpenStreetMap contributors, Open Database Licence
+    (ODbL) v1.0. Note that the ODbL is a share-alike licence: if you distribute
+    a derived database you have obligations under it that this file does not
+    lift.
+  - Census and municipal tables — data.opencity.in and the Pune Municipal
+    Corporation, published as open data.
+  - A GTFS extract obtained from a third-party repository.
+  - `gadgil_poona_survey_part1.pdf` — D. R. Gadgil, "Poona: A Socio-Economic
+    Survey, Part I — Economic", a scan from the Internet Archive's Digital
+    Library of India collection.
 
---------------------------------------------------------------------------------
-4. TEXT AND DATA MINING — EXPRESS RESERVATION
---------------------------------------------------------------------------------
+If you only take the code, none of this concerns you. If you redistribute the
+repository or the data, check those terms yourself.
 
-4.1  The Rightsholder EXPRESSLY RESERVES the right to carry out TDM of the Work
-     and withholds consent to all TDM by any other party.
-4.2  This Clause constitutes an express reservation of rights in an appropriate
-     manner, including by machine-readable means, for the purposes of Article
-     4(3) of Directive (EU) 2019/790 on Copyright and Related Rights in the
-     Digital Single Market, with the effect that the exception in Article 4(1)
-     does not apply to the Work.
-4.3  This Clause further constitutes a reservation for the purposes of § 44b(3)
-     of the German Urheberrechtsgesetz and all equivalent implementing
-     provisions throughout the European Economic Area, a withholding of consent
-     for the purposes of any United Kingdom TDM exception, and a reservation of
-     all rights under Title 17 of the United States Code and any other
-     applicable copyright statute.
-4.4  A machine-readable expression of this reservation, in TDM Reservation
-     Protocol format, is published at `.well-known/tdmrep.json`. Clause 4 and
-     that file are to be read together; either alone constitutes sufficient
-     notice.
-4.5  Unauthorised crawling, scraping or ingestion of the Work for the purposes
-     described in Clause 3.5 constitutes copyright infringement.
 
---------------------------------------------------------------------------------
-5. PLATFORM VISIBILITY AND FORKING
+2. EVERY PERSON IN THIS SIMULATION IS INVENTED
 --------------------------------------------------------------------------------
 
-5.1  Incidental caching and temporary reproduction necessary to view the Work
-     through GitHub's web interface is permitted.
-5.2  The Rightsholder acknowledges that, by hosting the Work in a public
-     repository, GitHub's Terms of Service grant each GitHub user a licence to
-     use, display and perform the Work through the GitHub Service and to
-     reproduce it SOLELY ON GITHUB as permitted through GitHub's functionality,
-     including by forking. Nothing in this notice purports to remove, limit or
-     override that grant, and to the extent of any conflict that grant prevails.
-5.3  That grant is exhaustive of what is permitted on-platform. Any such fork is
-     strictly limited to hosting on GitHub, conveys NO licence to use, execute,
-     modify, distribute or mine the Work, and remains subject in full to
-     Clauses 3 and 4.
+This project simulates a real place — four peths of Pune's old city, with real
+street geometry and real building and business names taken from OpenStreetMap.
+The people are not real. Every household, name, age, occupation, religion,
+income, illness, argument, rumour and misfortune is synthesised from a seed and
+a census marginal, or written by a language model. Any resemblance to a living
+person is coincidence produced by a random number generator.
 
---------------------------------------------------------------------------------
-6. THIRD-PARTY MATERIAL
---------------------------------------------------------------------------------
+Nothing this software outputs is a statement of fact about any real person,
+family, community, business, institution or public body, including those whose
+names appear in the map data. Model-generated text may be wrong, offensive, or
+defamatory-sounding about real named places; it is fiction generated by
+machine and is not an assertion by the author or by anyone else.
 
-6.1  Clauses 2 to 4 apply to the Rightsholder's own original material only.
-6.2  The repository vendors third-party material under `data/anchors/`, which is
-     NOT covered by this notice and remains subject to the licences of its
-     original authors, catalogued with sources and checksums in
-     `data/anchors/MANIFEST.md`, including:
-     (a) OpenStreetMap extracts (`*_places.geojson`, `*_roads.geojson`,
-         `osm_*_raw.json`) — (c) OpenStreetMap contributors, Open Database
-         Licence (ODbL) v1.0;
-     (b) Census and municipal tables — data.opencity.in and the Pune Municipal
-         Corporation, published as open data;
-     (c) A GTFS extract obtained from a third-party repository;
-     (d) `gadgil_poona_survey_part1.pdf` — D. R. Gadgil, "Poona: A
-         Socio-Economic Survey, Part I — Economic", from the Internet Archive's
-         Digital Library of India collection.
-6.3  Nothing in this notice grants, restricts or otherwise affects any right in
-     that third-party material, nor purports to restrict any right the ODbL
-     confers.
+If you publish or act on anything this software produces, that is your decision
+and your responsibility.
 
---------------------------------------------------------------------------------
-7. PERMISSION
+
+3. IT CALLS PAID APIS
 --------------------------------------------------------------------------------
 
-7.1  Permission to use or licence the Work may be requested from the
-     Rightsholder via the contact details published on the GitHub profile named
-     above.
-7.2  In the absence of a formal, signed written agreement, no permission exists.
-
---------------------------------------------------------------------------------
-8. GOVERNING LAW, JURISDICTION AND SEVERABILITY
---------------------------------------------------------------------------------
-
-8.1  This notice, and any dispute or claim arising out of or in connection with
-     it or with the Work, whether contractual or non-contractual, shall be
-     governed by and construed in accordance with the laws of India.
-8.2  The courts at Pune, Maharashtra, India shall have exclusive jurisdiction,
-     save that the Rightsholder may bring proceedings for infringement, or seek
-     injunctive or other urgent relief, before any court of competent
-     jurisdiction in any territory in which infringement occurs or is
-     threatened.
-8.3  If any provision of this notice is held invalid or unenforceable in any
-     jurisdiction, it shall be severed to the minimum extent necessary and all
-     remaining provisions shall continue in full force and effect in that
-     jurisdiction and without limitation elsewhere.
-8.4  No failure or delay by the Rightsholder in exercising any right shall
-     operate as a waiver of it.
-
---------------------------------------------------------------------------------
-9. NO WARRANTY
---------------------------------------------------------------------------------
-
-THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE RIGHTSHOLDER BE
-LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE WORK
-OR THE USE OR OTHER DEALINGS IN THE WORK.
+Running this with scenes enabled sends requests to third-party language-model
+providers using your own API key and spends your own money. You are responsible
+for your keys, your spend, and your compliance with those providers' terms. The
+author is not.
