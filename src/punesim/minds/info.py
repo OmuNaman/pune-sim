@@ -133,6 +133,33 @@ def traits(run_seed: int, person_id: str) -> Traits:
     return Traits(sociability=float(v[0]), credulity=float(v[1]), conscientiousness=float(v[2]))
 
 
+# When a body is up. The lower bound on waking is set by the block's own
+# routines: the earliest anybody leaves the house is a schoolchild at 07:10
+# (world.schedule), and a chronotype that woke someone after their own front
+# door closed would quietly delete their morning at home.
+WAKE_S = (int(5.5 * 3600), 7 * 3600)
+BED_S = (22 * 3600, int(23.5 * 3600))
+
+
+@lru_cache(maxsize=1 << 17)
+def awake_window(run_seed: int, person_id: str) -> tuple[int, int]:
+    """(wake, bed) in seconds after midnight — a person's chronotype.
+
+    Derived, never stored, and memoised, for the same reasons as `traits`: it
+    is a pure function of its key and the info lane asks for it once per person
+    per day, which at V3 scale is a Philox construction the run cannot afford.
+    Timeless rather than per-day on purpose — a chronotype is a habit, and
+    re-keying it on the day would multiply that cost by the length of the run
+    to buy a few minutes of jitter nothing measures.
+    """
+    rng = keyed_rng(run_seed, "sleep", person_id, 0, "chronotype")
+    v = rng.random(2)
+    return (
+        WAKE_S[0] + int(v[0] * (WAKE_S[1] - WAKE_S[0])),
+        BED_S[0] + int(v[1] * (BED_S[1] - BED_S[0])),
+    )
+
+
 # --- rendering (deterministic templates; LLM prose only inside scenes) ------
 
 _PREDICATE_PHRASE = {
@@ -151,6 +178,21 @@ _PREDICATE_PHRASE = {
 }
 
 
+# `block.places` are BUILDINGS, and for some troubles the culprit a
+# neighbourhood names is an ORGANISATION — nobody blames a pumping station for
+# a dry tap, they blame the municipality. The world already acts through these
+# two ids (engine.reactions files the complaint about a supply cut to
+# org:pmc_water and about a load-shed to org:mseb); this is only what a
+# neighbour calls them out loud. Kept deliberately separate from the viewer's
+# and the scene renderer's own phrasings of the same ids: those are UI copy,
+# this is words in a rumour's mouth, and unifying them would change prose in
+# two lanes that have nothing to do with this one.
+ORG_NAMES = {
+    "org:pmc_water": "the municipal water department",
+    "org:mseb": "the electricity board",
+}
+
+
 def render_text(claim: Claim, block: Block) -> str:
     place = block.get(claim.subject)
     subject = place.name if place and place.name else claim.subject
@@ -166,7 +208,7 @@ def render_text(claim: Claim, block: Block) -> str:
         body = "they say " + body
     if claim.blame:
         bp = block.get(claim.blame)
-        who = bp.name if bp and bp.name else claim.blame
+        who = bp.name if bp and bp.name else ORG_NAMES.get(claim.blame, claim.blame)
         body += f"; people are blaming {who}"
     return body[0].upper() + body[1:]
 
@@ -190,9 +232,24 @@ def _op_generalize(claim: Claim, rng) -> Claim:
                    veracity="distorted" if claim.veracity == "true" else claim.veracity)
 
 
+# How far "nearby" reaches: five minutes on foot. Measured over both blocks,
+# that is a median of 13 named places on kasba and 16 on oldcity — the lane you
+# are standing in and the two around the corner, which is the scale at which a
+# person inventing a corroborating detail actually reaches for one. It used to
+# be the entire block: 437 places on oldcity, uniformly, which is how a rumour
+# about the water at Tulshibaug Mandir acquired "people are blaming Blackberrys",
+# a menswear shop half the old city away.
+NEARBY_WALK_S = 300
+
+
 def _op_specify(claim: Claim, rng, block: Block) -> Claim:
-    """Inject a plausible nearby detail from canon — false precision."""
-    near = [p for p in block.places if p.name and p.id != claim.subject]
+    """Inject a plausible nearby detail from canon — false precision.
+
+    Nearby means nearby. Twelve of oldcity's 438 places have nothing within
+    five minutes' walk; a claim about one of those gets no invented detail,
+    because there is genuinely no landmark to hand for the teller to reach for.
+    """
+    near = block.nearby(claim.subject, NEARBY_WALK_S)
     if not near:
         return claim
     pick = near[int(rng.integers(0, len(near)))]
@@ -201,12 +258,52 @@ def _op_specify(claim: Claim, rng, block: Block) -> Claim:
                    blame=claim.blame or pick.id)
 
 
+# Who a claim's topics could plausibly implicate.
+#
+# This is a table because the world holds no other representation of
+# responsibility: places carry a `kind`, claims carry `topics`, and nothing
+# anywhere connects the two vocabularies. Without the connection the op picked
+# uniformly from 205 "prominent" places, so a water-contamination rumour blamed
+# a bank. Nothing less arbitrary than saying it outright was available; what
+# keeps it honest is that it is *small*, it lives against the op that reads it,
+# and — like ACTION_THRESHOLDS above — it has no default. A topic nothing maps
+# gets no reattribution at all: the op fires, the claim is still marked as
+# drifting, and nobody is named, which is a truer account of a rumour with no
+# obvious villain than picking one at random.
+#
+# Utilities are the case where the culprit is not a building at all — you blame
+# the municipality for a dry tap, not the pumping station — and the world
+# already names the two organisations that answer for them (see ORG_NAMES).
+BLAMED_ORG = {"water": "org:pmc_water", "power": "org:mseb"}
+# For the rest the culprit IS a building, and which one is not a matter of
+# taste: it is whoever has the job. Candidates are drawn from the subject's own
+# neighbourhood first, and only if the responsible kind is absent from it does
+# blame reach across the block — your police station may well be in the next
+# peth, but it is still yours.
+BLAMED_KINDS = {
+    "safety": ("police",),
+    "crime": ("police",),
+    "health": ("hospital", "clinic"),
+    "fraud": ("bank",),
+    "food": ("restaurant", "market"),
+}
+
+
 def _op_reattribute(claim: Claim, rng, block: Block) -> Claim:
-    prominent = [p for p in block.places if p.name and p.kind in ("temple", "school", "hospital", "police", "bank", "market")]
-    if not prominent:
-        return claim
-    pick = prominent[int(rng.integers(0, len(prominent)))]
-    return replace(claim, blame=pick.id, veracity="distorted" if claim.veracity == "true" else claim.veracity)
+    who = next((BLAMED_ORG[t] for t in claim.topics if t in BLAMED_ORG), None)
+    if who is None:
+        kinds = next((BLAMED_KINDS[t] for t in claim.topics if t in BLAMED_KINDS), None)
+        if kinds is None:
+            return claim
+        pool = [p for p in block.nearby(claim.subject, NEARBY_WALK_S) if p.kind in kinds]
+        if pool:
+            pick = pool[int(rng.integers(0, len(pool)))]
+        else:
+            pick = block.nearest(claim.subject, *kinds) if block.get(claim.subject) else None
+        if pick is None or pick.id == claim.subject:
+            return claim  # the only candidate is the place it is already about
+        who = pick.id
+    return replace(claim, blame=who, veracity="distorted" if claim.veracity == "true" else claim.veracity)
 
 
 def _op_moralize(claim: Claim, rng) -> Claim:
@@ -449,10 +546,38 @@ def _copresence_windows(
     which cost a Philox construction per pair and are therefore exactly the
     thing being avoided. It does not touch the sizes where branching has been
     validated: below CROWD_EXACT_SPANS nothing is sampled at all.
+
+    Spans are clipped to the person's waking hours first. `presence_intervals`
+    is right that you are at home all night — a fire at 03:00 has to find you
+    there, and witness_tiers reads the same intervals to do it — but being
+    somewhere is not being available to talk. Unclipped, the whole night at
+    home was one contact window per pair of housemates, and a 30-day soak has
+    Mahavir Bafna telling two people something at 03:31.
+
+    What that cost is worth stating precisely, because the obvious guess is
+    wrong. Measured at 320 households over 3 days it barely changes the NUMBER
+    of contacts — 58,509 windows to 58,464 — since a pair asleep in one house
+    made exactly one window either way. What it changes is when a contact
+    happens and how long it lasts: 342,054 contact-hours to 289,331 (-15%),
+    and of the 50 hearings of 631 that landed between 03:00 and 05:00, 42
+    reappear between 06:00 and 08:00 and 8 stop happening at all (631 -> 617
+    hearings, from the pairs whose only overlap was while both were asleep).
+    So the defect was not really inflating contact
+    rate; it was putting a sixth of the block's talking time in the middle of
+    the night, which is worse for anything that reads the diurnal profile and
+    nearly invisible to anything that only counts.
     """
     at_place: dict[str, list[tuple[int, int, str]]] = {}
+    day0 = day * SECONDS_PER_DAY
     for pid in sorted(intervals):
+        wake, bed = awake_window(run_seed, pid)
+        up, down = day0 + wake, day0 + bed
         for place, a0, a1 in intervals[pid]:
+            a0, a1 = max(a0, up), min(a1, down)
+            # a span shorter than the minimum overlap cannot make a window with
+            # anything, so it never has to be sorted or scanned
+            if a1 - a0 < MIN_OVERLAP_S:
+                continue
             at_place.setdefault(place, []).append((a0, a1, pid))
     windows: list[tuple[int, int, str, str, str]] = []
     for place in sorted(at_place):

@@ -5,6 +5,7 @@ import pytest
 
 from punesim import engine
 from punesim.kernel.log import EventLog
+from punesim.kernel.rng import keyed_rng
 from punesim.minds import info
 from punesim.population import synthesize
 from punesim.world import hazards
@@ -371,6 +372,109 @@ def test_every_action_says_whether_it_means_staying_away():
     assert "store_water" not in info.AVOIDING_ACTIONS, (
         "filling a drum because the supply was cut is not a reason to stay away "
         "from where it was cut"
+    )
+
+
+def test_an_invented_detail_comes_from_the_same_lanes(world):
+    """`_op_specify`'s variable was called `near`, its docstring promised
+    "nearby", and it drew uniformly from every named place in the block — 437
+    of them on oldcity, with no distance term anywhere. That is how a rumour
+    about the water at Tulshibaug Mandir acquired "people are blaming
+    Blackberrys", a menswear shop most of the old city away."""
+    block, _, _ = world
+    subject = next(p for p in block.places if p.name and block.nearby(p.id, info.NEARBY_WALK_S))
+    claim = _claim(subject=subject.id, specificity=0.2, blame=None)
+    picks = set()
+    for i in range(60):
+        rng = keyed_rng(SEED, "info", f"person:spec.{i}", 0, "mutate")
+        out = info._op_specify(claim, rng, block)
+        assert out.blame, "SPECIFY invented no detail at all"
+        picks.add(out.blame)
+        assert block.walk_seconds(subject.id, out.blame) <= info.NEARBY_WALK_S, (
+            f"{block[out.blame].name} is "
+            f"{block.walk_seconds(subject.id, out.blame) // 60} minutes' walk from "
+            f"{subject.name} — that is not a detail anyone standing there reaches for"
+        )
+    named = [p for p in block.places if p.name]
+    assert len(picks) < len(named), (
+        "every named place in the block is still reachable as a 'nearby' detail"
+    )
+    assert any(block.walk_seconds(subject.id, p.id) > info.NEARBY_WALK_S for p in named), (
+        "this block is too small for the test to mean anything — everything is nearby"
+    )
+
+
+def test_blame_lands_on_somebody_who_could_be_responsible(world):
+    """`_op_reattribute` used to pick uniformly from 205 'prominent' places
+    with nothing connecting the choice to the claim, so a water-contamination
+    rumour blamed a bank. Who gets blamed now has to have something to do with
+    what is being alleged — and for a utility that is an organisation, because
+    nobody blames a pumping station for a dry tap."""
+    block, _, _ = world
+    subject = block.of_kind("temple", "shop", "market")[0]
+
+    def blamed(**kw):
+        claim = _claim(subject=subject.id, blame=None, **kw)
+        rng = keyed_rng(SEED, "info", "person:blame", 0, "mutate")
+        return info._op_reattribute(claim, rng, block)
+
+    water = blamed(predicate="contaminated", topics=("water", "health"))
+    assert water.blame == "org:pmc_water"
+    assert "municipal water" in info.render_text(water, block), (
+        "an org id leaked into a rumour's words instead of a name for it"
+    )
+    crime = blamed(predicate="dangerous", topics=("crime",))
+    assert block[crime.blame].kind == "police"
+
+    # ...and a topic nothing maps names nobody, exactly as an unmapped topic
+    # changes nobody's route: the sim does not invent a villain it was never
+    # told about.
+    assert blamed(topics=("astrology",)).blame is None
+    assert set(info.BLAMED_ORG.values()) <= set(info.ORG_NAMES), (
+        "a claim can be blamed on an org the renderer has no words for"
+    )
+
+
+def test_nobody_is_available_to_talk_in_their_sleep():
+    """`presence_intervals` is right that you are at home all night — a 03:00
+    fire has to be able to find you there, and `witness_tiers` reads the same
+    intervals to do it. It was `_copresence_windows` that read eight hours of
+    sleep as eight hours of opportunity, so a 30-day soak has Mahavir Bafna
+    telling two people something at 03:31."""
+    for day in (0, 5):
+        base = day * 86400
+        intervals = {
+            "person:sleep.a": [("home:1", base, base + 86400)],
+            "person:sleep.b": [("home:1", base, base + 86400)],
+        }
+        windows = info._copresence_windows(intervals, SEED, day)
+        assert windows, "two people home all day must still find a moment to talk"
+        wake = max(info.awake_window(SEED, p)[0] for p in intervals)
+        bed = min(info.awake_window(SEED, p)[1] for p in intervals)
+        for lo, hi, _place, _a, _b in windows:
+            assert base + wake <= lo < hi <= base + bed, (
+                f"a contact window at {(lo % 86400) // 3600:02d}:{(lo % 3600) // 60:02d}, "
+                "when both of them are asleep"
+            )
+    # the earliest anyone in the block leaves the house is a schoolchild at
+    # 07:10, so a chronotype may never wake somebody after their own front door
+    assert info.WAKE_S[1] <= 7 * 3600
+
+
+def test_the_block_stops_gossiping_at_night(tmp_path, world):
+    """The same thing end to end: no hop of any real run lands in the dark."""
+    block, hhs, people = world
+    log = EventLog(tmp_path / "night.db")
+    engine.run_simulation(log, SEED, block, hhs, people, days=6, hazards=True)
+    small_hours = [
+        e for e in log.events(type="info.heard")
+        if e.payload["channel"] == "f2f" and e.payload["source"] != "origin"
+        and not info.WAKE_S[0] <= e.sim_time % 86400 < info.BED_S[1]
+    ]
+    assert not small_hours, (
+        f"{len(small_hours)} conversations happened while everyone was asleep, "
+        f"the first at {small_hours[0].sim_time % 86400 // 3600:02d}:"
+        f"{small_hours[0].sim_time % 3600 // 60:02d}"
     )
 
 

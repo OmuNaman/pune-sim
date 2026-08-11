@@ -45,7 +45,18 @@ SEED, HOUSEHOLDS, DAYS = 108, 200, 3
 WATER = "place:node/10172994194"   # Tulshibaug Mandir
 SCHOOL = "place:node/3681735096"   # Ratanben Chunilal Mehta (RCM) Gujarati High School
 
-PINNED_HASH = "0dc63d4e01f9a8f154cf807b58a5ad8548ecdd1ebb8c557a47c3eb61edb475c5"
+# Re-pinned 2026-08-11, from 0dc63d4e…, for the three info-lane fixes: rumour
+# details are now drawn from places within five minutes' walk of the subject
+# instead of from the whole block, blame is constrained to targets that could
+# plausibly answer for the claim's topic, and co-presence windows are clipped
+# to waking hours. Every count below is unchanged — the same 11,824 events, the
+# same 487 hearings by the same people — because none of the three changes what
+# spreads or how far. What moved is the *content* and the *clock*: this run's
+# blame targets were a median 23 minutes' walk from the accident they were
+# blamed for and are now 5, twelve of its texts named a culprit and five do,
+# and its three 03:00 conversations are gone. If a future change moves the
+# lane counts too, that is a different kind of change and needs its own reason.
+PINNED_HASH = "3b68ca6e428a2cf7f7d57072bee6ae1e173f48b285e0ca710dc13291e3e02f8e"
 PINNED_EVENTS = 11824
 PINNED_LANES = {"info.heard": 487, "belief.action": 4, "hospital.admitted": 1}
 

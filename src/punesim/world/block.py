@@ -129,6 +129,7 @@ class Block:
         self._of_kind: dict[frozenset[str], list[Place]] = {}
         self._nearest: dict[tuple[str, frozenset[str]], Place | None] = {}
         self._walk: dict[tuple[str, str], int] = {}
+        self._nearby: dict[tuple[str, int], list[Place]] = {}
 
     def __getitem__(self, place_id: str) -> Place:
         return self._by_id[place_id]
@@ -155,6 +156,30 @@ class Block:
         )
         self._nearest[key] = found
         return found
+
+    def nearby(self, from_id: str, max_walk_s: int) -> list[Place]:
+        """Named places within `max_walk_s` on foot of `from_id`, nearest first.
+
+        A place's neighbourhood is a constant of the block, exactly like
+        `of_kind` and `nearest`, so it is computed once and kept. It is measured
+        with `walk_seconds`, which means that where the block has a road graph
+        "near" means near *along the lanes* — two addresses either side of the
+        Mutha are two hundred metres and twenty minutes apart, and only one of
+        those numbers is what a neighbour means by nearby.
+        """
+        key = (from_id, max_walk_s)
+        hit = self._nearby.get(key)
+        if hit is None:
+            if from_id not in self._by_id:  # an unplaced subject has no neighbours
+                return []
+            within = [
+                p for p in self.places
+                if p.name and p.id != from_id
+                and self.walk_seconds(from_id, p.id) <= max_walk_s
+            ]
+            within.sort(key=lambda p: (self.walk_seconds(from_id, p.id), p.id))
+            hit = self._nearby[key] = within
+        return hit
 
     def walk_seconds(self, a_id: str, b_id: str) -> int:
         """How long it takes to walk between two places.

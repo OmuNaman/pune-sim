@@ -299,10 +299,46 @@ with a two-day stay; the contradiction needs a stay that is still open on the
 following mornings *and* scenes rendered into it. Thirty days is what the clause
 asks for and thirty days is what it took.
 
-**Fix in progress**, and deliberately not a veto: the scene lane is being given
-the physical facts (who is admitted, where, until when) rather than being
-forbidden to contradict them. A scene that knows the child is in Manish Clinic
-writes the mother at the ward, which is truer than a scene that was overruled.
+**Fixed**, and deliberately not by a veto: the scene lane is given the physical
+facts (who is admitted, where, until when) rather than forbidden to contradict
+them. `_apply_stays` is untouched; scene-revised plans still win everywhere.
+
+**Verified without re-running thirty days.** Re-soaking a month to check one fix
+is disproportionate, so the failure shape was reproduced instead: 5 days, 80
+households, a crash on day 1 leaving a child admitted across the mornings that
+follow — the exact configuration that broke. `runs/wardcheck`.
+
+Mechanically, the half that mattered most:
+
+```
+day 1 Fri 07:45  activity.start  admitted
+day 2 Sat 08:00  activity.start  admitted
+day 3 Sun 08:00  activity.start  admitted
+day 4 Mon 08:00  activity.start  admitted
+```
+
+Four consecutive days in the ward and **no scene wrote a plan override placing
+him at home** — previously `"wake up, rest on divan"` and `"rest and recover at
+home"` were committed as real events against an open admission.
+
+And the prose did not merely stop being wrong; it got better, which is the
+argument for informing over forbidding:
+
+> *Saturday* — "her mind on Dnyaneshwar at the hospital"; Aditya asks if they
+> can go and visit; Vaishali asks if she can send him a message.
+> *Sunday* — "Suhas left early to check on Dnyaneshwar at the dispensary, and
+> the family is waiting for news."
+> *Monday* — "**the empty chair at the table where Dnyaneshwar usually sits**
+> pulls the room into a heavier silence."
+
+That last image exists only because the model knew he was absent. A veto would
+have produced a scene with a hole in it.
+
+**What this does and does not settle.** It settles that the defect is fixed. It
+does not re-run V1-c, which is a thirty-day clause about a whole month holding
+together, and which stays FAIL until a full soak is run against the fixed code.
+Before that soak is worth trusting, the skeptic that mis-refuted this finding
+needed fixing too — done, see `scripts/continuity_read.py`.
 
 ---
 
