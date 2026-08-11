@@ -1,5 +1,6 @@
 import type {
-  DaySummary, EventLine, Frame, PersonRow, PlaceRow, RunMeta, RunSummary,
+  DaySummary, EventLine, Frame, PersonDossier, PersonRow, PlaceDetail, PlaceRow,
+  RunMeta, RunSummary,
 } from './types'
 
 async function json<T>(url: string): Promise<T> {
@@ -21,14 +22,24 @@ export const api = {
 
   places: (id: string) => json<PlaceRow[]>(`/api/runs/${id}/places`),
 
+  // Ids carry slashes — `place:way/264276391` — and the route is declared as
+  // `{place_id:path}` so the server wants them raw. Person ids are safe but go
+  // through the same shape for consistency.
+  place: (id: string, placeId: string, t: number) =>
+    json<PlaceDetail>(`/api/runs/${id}/place/${placeId}?t=${Math.floor(t)}`),
+
+  person: (id: string, pid: string, day: number) =>
+    json<PersonDossier>(`/api/runs/${id}/person/${encodeURIComponent(pid)}?day=${day}`),
+
   geo: (id: string, layer: 'buildings' | 'roads') =>
     json<GeoJSON.FeatureCollection>(`/api/runs/${id}/geo/${layer}`),
 
   days: (id: string) => json<DaySummary[]>(`/api/runs/${id}/days`),
 
-  ticker: (id: string, sinceSeq = 0, limit = 500) =>
+  ticker: (id: string, sinceSeq = 0, limit = 500, day?: number) =>
     json<{ items: EventLine[]; last_seq: number }>(
-      `/api/runs/${id}/ticker?since_seq=${sinceSeq}&limit=${limit}`),
+      `/api/runs/${id}/ticker?since_seq=${sinceSeq}&limit=${limit}` +
+      (day === undefined ? '' : `&day=${day}`)),
 
   /** The binary frame. See api/positions.py for the layout. */
   async positions(id: string, t: number, signal?: AbortSignal): Promise<Frame> {

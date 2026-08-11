@@ -13,6 +13,7 @@ import maplibregl from 'maplibre-gl'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { ScreenGridLayer } from '@deck.gl/aggregation-layers'
+
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 import { api } from '../api/client'
@@ -45,6 +46,10 @@ const CODE_RGB: [number, number, number][] = [
 const CODE_ALPHA = [110, 255, 235, 235, 245, 245, 255, 245, 150]
 
 const DOT_ZOOM = 14.2   // below this, density; above it, individual people
+
+// Which place kinds keep their label when labels have to fight for room.
+const HERITAGE_KINDS = new Set(['temple', 'mosque', 'church', 'jain_temple',
+  'vihara', 'gurdwara', 'synagogue', 'hospital', 'school', 'market', 'police'])
 
 export function MapRoot({ meta }: { meta: RunMeta }) {
   const host = useRef<HTMLDivElement>(null)
@@ -118,22 +123,31 @@ export function MapRoot({ meta }: { meta: RunMeta }) {
     }
 
     if (placesRef.current.length && zoomRef.current >= 15.4) {
+      const z = zoomRef.current
+      const labelled = z >= 16.8
+        ? placesRef.current
+        : placesRef.current.filter((p) => HERITAGE_KINDS.has(p.kind))
       layers.push(new TextLayer({
         id: 'place-labels',
-        data: placesRef.current,
+        data: labelled,
         getPosition: (p: PlaceRow) => [p.lon, p.lat],
         getText: (p: PlaceRow) => p.name,
         getSize: 10,
         sizeUnits: 'pixels',
-        getColor: [43, 36, 64, 205],
+        getColor: [43, 36, 64, 215],
         outlineWidth: 3,
-        outlineColor: [246, 240, 225, 230],
+        outlineColor: [246, 240, 225, 235],
         fontSettings: { sdf: true },
         fontFamily: 'Mukta, system-ui, sans-serif',
         getTextAnchor: 'start',
         getAlignmentBaseline: 'center',
         getPixelOffset: [7, 0],
         pickable: true,
+        // deck's CollisionFilterExtension was tried here and dropped EVERY
+        // label under interleaved rendering — 124 built, none drawn. Rather
+        // than fight it, labels are rationed by zoom: heritage and civic
+        // anchors first, the rest only once there is room for them. A place
+        // whose name is hidden is still a dot you can click.
         onClick: (info: any) => info.object && select({ kind: 'place', id: info.object.id }),
       }))
       layers.push(new ScatterplotLayer({

@@ -195,6 +195,70 @@ def test_the_day_strip_counts_without_reading_the_log(served):
     ).summary()[0]
 
 
+def test_no_event_ever_renders_as_a_raw_payload(served):
+    """The old viewer's fallback dumped JSON into the ticker, a model read it
+    back, and `test_no_prompt_line_ever_dumps_a_raw_payload` exists because of
+    it. A type with no sentence should name itself and say nothing else — a
+    missing sentence is a TODO, not something to show a person."""
+    from punesim.api.humanize import text_for
+
+    client, rid, _ = served
+    w = client.app.state.worlds.get(rid, client.app.state.registry.get(rid).db)
+    for typ in w.view.types():
+        rows = w.view.of_type(typ, limit=1)
+        if not rows:
+            continue
+        text = text_for(rows[0], w.person_names, w.place_names)
+        assert "{" not in text and '":' not in text, f"{typ} leaked its payload: {text}"
+        assert not text.startswith(f"{typ}:"), f"{typ} rendered as its own type name"
+
+
+def test_a_plan_step_reference_is_never_printed_raw(served):
+    """`plan.step_dropped.place_ref` is a schedule reference, not a place id:
+    the same field holds `place:home.way/1`, `place:way/2`, a bare `node/3` and
+    the literal `place:unknown`. None are keys the block knows."""
+    from punesim.api.humanize import _place_ref
+
+    client, rid, _ = served
+    w = client.app.state.worlds.get(rid, client.app.state.registry.get(rid).db)
+    for ref in ("place:unknown", "", None, "place:home.way/999", "node/12345"):
+        out = _place_ref(ref, w.place_names)
+        assert ":" not in out and "/" not in out, f"{ref!r} printed raw as {out!r}"
+    # ...and a ref it CAN resolve still resolves
+    real = next(iter(w.place_names))
+    assert _place_ref(real, w.place_names) == w.place_names[real]
+
+
+def test_one_persons_movement_does_not_poison_the_city_cache(served):
+    """`segs_for_day(person=…)` narrows in SQL — 6.9s of a 10.5s dossier at V3
+    scale was parsing 224,544 movement rows to show one person's walk. The map
+    reads the SAME day cache, so a one-person answer landing in it would draw a
+    city of one, and nothing would raise."""
+    client, rid, people = served
+    view = client.app.state.worlds.get(rid, client.app.state.registry.get(rid).db).view
+    everyone = view.segs_for_day(1)
+    pid = sorted(people)[0]
+    one = view.segs_for_day(1, person=pid)
+    assert set(one) == {pid}
+    assert len(view.segs_for_day(1)) == len(everyone) > 1, (
+        "the whole-city day cache was replaced by one person's movement"
+    )
+
+
+def test_the_ticker_can_be_asked_for_one_day(served):
+    """Without this the endpoint returns the last N events of the WHOLE run, so
+    a client sitting on day 1 of a 30-day log gets a page of day 29, filters it
+    to nothing, and truthfully reports that nothing has happened."""
+    client, rid, _ = served
+    d0 = client.get(f"/api/runs/{rid}/ticker", params={"day": 0}).json()["items"]
+    d1 = client.get(f"/api/runs/{rid}/ticker", params={"day": 1}).json()["items"]
+    assert d0, "day 0 has the injected collision in it"
+    assert all(e["day"] == 0 for e in d0)
+    assert all(e["day"] == 1 for e in d1)
+    whole = client.get(f"/api/runs/{rid}/ticker").json()["items"]
+    assert len(d0) + len(d1) == len(whole)
+
+
 def test_the_consequence_cone_walks_real_causation(served):
     """An injection is a stone and this is the ripple. `caused_by` is a real
     column, so the chain is the log's own claim about what caused what — not a

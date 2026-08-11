@@ -17,6 +17,10 @@ const qc = new QueryClient({
   },
 })
 
+// Handle for ui/scripts/query.mjs — a panel stuck on "loading" and a panel
+// whose fetch failed look identical from outside.
+;(globalThis as any).__qc = qc
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={qc}>

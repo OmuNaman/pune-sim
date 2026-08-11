@@ -1,0 +1,103 @@
+{
+  "_comment": [
+    "Hand-curated notes on places the old city is actually known for, keyed by",
+    "the OSM id the extract carries — every key below was verified to exist in",
+    "data/anchors/oldcity_places.geojson, so none of these can point at nothing.",
+    "",
+    "This is the one place in the project where a human wrote a fact about the",
+    "real world rather than the sim generating one. Everything else the UI shows",
+    "is folded from the log. Keep it that way: these are notes on the GEOGRAPHY,",
+    "never on the simulated people who happen to be standing in it.",
+    "",
+    "`est` is a year or century as commonly given; where sources disagree the",
+    "note says so rather than picking. Devanagari names are the common local",
+    "spelling, not a transliteration of the Latin."
+  ],
+  "places": {
+    "way/264276391": {
+      "dev": "श्रीमंत दगडूशेठ हलवाई गणपती",
+      "est": "1893",
+      "note": "Founded by a sweet-seller who lost his son to the plague. Bal Gangadhar Tilak turned the private worship of exactly this kind into the public Ganeshotsav a year later, as a way to gather crowds the Raj could not ban. The city's richest temple, and its most visited."
+    },
+    "node/2289294092": {
+      "dev": "कसबा गणपती",
+      "est": "c. 1636",
+      "note": "The gramdaivat — the city's own presiding deity, installed by Jijabai when Shivaji was a boy. Pune's Ganesh processions still leave from here first, ahead of every wealthier temple."
+    },
+    "node/2358247542": {
+      "dev": "विश्रामबाग वाडा",
+      "est": "1807",
+      "note": "The last Peshwa's town house, and the reason this peth looks the way it does: a seven-storey wooden facade of carved teak that survived the fire the Wada itself did not. Used as a college, then a post office, now partly a museum."
+    },
+    "way/380363669": {
+      "dev": "तुळशीबाग राम मंदिर",
+      "est": "1761",
+      "note": "The temple the market grew around, not the other way about. Its shikhara is visible from four lanes away; everything under it sells bangles, steel vessels and plastic buckets."
+    },
+    "node/10172994194": {
+      "dev": "तुळशीबाग",
+      "est": "18th c.",
+      "note": "The market itself — the densest retail in the old city, and the place a Punekar means when they say they are going shopping."
+    },
+    "node/2701228387": {
+      "dev": "तांबडी जोगेश्वरी",
+      "est": "c. 1545",
+      "note": "Older than the Peshwas and older than Shivaji. The goddess is the city's other gramdaivat, and her palanquin has right of way over every other in the Ganpati procession."
+    },
+    "way/65486228": {
+      "dev": "महात्मा फुले मंडई",
+      "est": "1886",
+      "note": "The city's wholesale vegetable market, built by the British as Reay Market on an octagonal plan with eight wings and a clock tower. Renamed for Jyotirao Phule, who is buried nearby."
+    },
+    "way/215535660": {
+      "dev": "ओंकारेश्वर मंदिर",
+      "est": "1736",
+      "note": "Built by the Peshwas on the Mutha's bank as a cremation-ground temple, which is why it sits slightly apart from the peth around it."
+    },
+    "node/11846700223": {
+      "dev": "त्रिशुंड गणपती",
+      "est": "1754",
+      "note": "The three-trunked Ganpati. A small stone temple carrying carvings nothing else in the city has — a rhinoceros, a British soldier, a Persian inscription — and a sealed basement said to hold its founder's samadhi, opened once a year."
+    },
+    "way/1044781042": {
+      "dev": "नुलकर वाडा",
+      "est": "18th c.",
+      "note": "One of the surviving wadas — the courtyard house that is the old city's basic unit. Several families around one open square, which is why 1.7 households share a building in this sim and that is not a shortage."
+    },
+    "way/365296308": {
+      "dev": "ओक वाडा",
+      "est": "18th c.",
+      "note": "Another surviving wada. Of the 450-odd heritage wadas catalogued in Pune, most are gone; the ones left are usually still lived in."
+    },
+    "node/5832547676": {
+      "dev": "चिंचेची तालीम",
+      "est": "19th c.",
+      "note": "A talim is a neighbourhood wrestling gymnasium, and in the peths it is also a political address: the akhada, the Ganpati mandal and the local strongman have historically been the same institution."
+    },
+    "node/5832579354": {
+      "dev": "गुरुजी तालीम",
+      "est": "1887",
+      "note": "Its Ganpati mandal was founded jointly by Hindu and Muslim families — the only one of the manache Ganpati with that origin, and still described that way in the city."
+    },
+    "node/2536024948": {
+      "dev": "हत्ती गणपती",
+      "est": "18th c.",
+      "note": "The elephant Ganpati, named for the stone elephants flanking the door."
+    },
+    "way/219767488": {
+      "dev": "मोदी गणपती",
+      "est": "18th c.",
+      "note": "A peth temple of the kind there are fifty of in this extract: too small to be a landmark, too old and too used to be anything but the centre of its own lane."
+    },
+    "node/3836998960": {
+      "dev": "बेलबाग मंदिर",
+      "est": "1769",
+      "note": "Built by Nana Phadnavis's family. The bel trees it was named for are gone; the courtyard is now a car park with a temple in it."
+    },
+    "way/885038701": {
+      "dev": "मोमिनपुरा मशीद",
+      "est": "19th c.",
+      "note": "The heart of Mominpura, the old city's principal Muslim quarter — one of the four peths in this sim, and the reason its demography is not the same as Kasba's."
+    }
+  }
+}

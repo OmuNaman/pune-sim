@@ -131,7 +131,21 @@ def person(request: Request, run_id: str, pid: str, day: int | None = None):
         raise HTTPException(404, f"no person {pid!r}")
     memories, moods, lines, interviews, heard = [], [], [], [], []
     hh = p.household_id
-    for e in w.view.of_type(*_DOSSIER_TYPES, *_HOUSEHOLD_TYPES, limit=1_000_000):
+    # Two scopes, on purpose. "Their day" is one day — and fetching every event
+    # of eighteen types across a thirty-day run to show a thirtieth of them was
+    # 4.6 s a click at V3 scale, slower than the whole map. But what somebody
+    # REMEMBERS and what they BELIEVE accumulate over the run; scoping those to
+    # today would quietly empty them, and an empty panel reads as "nothing
+    # happened to this person" rather than "you are looking at one day".
+    day_rows = w.view.of_type(*_DOSSIER_TYPES, *_HOUSEHOLD_TYPES,
+                              limit=1_000_000, day=day)
+    lifetime_rows = w.view.for_person(
+        pid, ("info.heard", "memory.formed", "conversation.held"), limit=400)
+    seen_seq: set[int] = set()
+    for e in [*lifetime_rows, *day_rows]:
+        if e.seq in seen_seq:
+            continue
+        seen_seq.add(e.seq)
         pl = e.payload
         touched = {pl.get("person"), pl.get("sender"), pl.get("entity_id"),
                    pl.get("complainant"), pl.get("victim"),
@@ -171,7 +185,7 @@ def person(request: Request, run_id: str, pid: str, day: int | None = None):
 
     trips = []
     if day is not None:
-        for s in w.view.segs_for_day(day).get(pid, []):
+        for s in w.view.segs_for_day(day, person=pid).get(pid, []):
             trips.append({
                 "t0": s.t0, "t1": s.t1, "kind": s.kind,
                 "a": s.a, "a_name": w.place_names.get(s.a, ""),

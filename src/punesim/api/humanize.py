@@ -51,6 +51,27 @@ def refs_in(payload: dict) -> dict[str, list[str]]:
     }
 
 
+def _place_ref(ref, places: dict[str, str]) -> str:
+    """A plan step's place — which is a schedule reference, not a place id.
+
+    `plan.step_dropped` carries whatever the plan step named, and plans are
+    compiled against a schedule template rather than against the block, so the
+    same field holds `place:home.way/123`, `place:way/456`, a bare `node/789`
+    and the literal `place:unknown` — none of which are keys the block knows.
+    Rather than print a raw ref at somebody, resolve what can be resolved and
+    describe the rest.
+    """
+    if not isinstance(ref, str) or not ref or ref.endswith("unknown"):
+        return "where they were going"
+    body = ref.split(":", 1)[-1]          # place:home.way/1 -> home.way/1
+    for cand in (ref, body, body.replace(".", ":", 1),
+                 f"place:{body}", f"home:{body}"):
+        hit = places.get(cand)
+        if hit:
+            return hit
+    return "home" if "home" in body else "where they were going"
+
+
 def text_for(e, names: dict[str, str], places: dict[str, str]) -> str:
     """One event as a sentence. Ported from viewer/server.py:35-141."""
     p = e.payload
@@ -166,8 +187,20 @@ def text_for(e, names: dict[str, str], places: dict[str, str]) -> str:
     if t == "fact.established":
         return f"Canon: {nm(p.get('subject'))} — {p.get('predicate')} = {p.get('value')}"
     if t == "scene.gate_capped":
-        return f"(attention gate capped: {p.get('rendered')} rendered, {p.get('dropped') and len(p['dropped'])} dropped)"
-    return f"{t}: {orjson.dumps(p).decode()[:120]}"
+        return (f"(attention gate capped: {p.get('rendered')} rendered, "
+                f"{p.get('dropped') and len(p['dropped'])} dropped)")
+    if t == "plan.step_dropped":
+        return f"{nm(p.get('person'))} could not get to {_place_ref(p.get('place_ref'), places)} today"
+    if t == "llm.response":
+        u = p.get("usage") or {}
+        tok = u.get("total_tokens") or u.get("completion_tokens")
+        return (f"(model call: {p.get('model', '?')}"
+                + (f", {tok} tokens" if tok else "") + ")")
+    # A raw payload is a leak, not a sentence: the old viewer's fallback dumped
+    # JSON into the ticker, and `test_no_prompt_line_ever_dumps_a_raw_payload`
+    # exists because a model then read it back. Name the type and say nothing
+    # else — a missing sentence is a TODO, not a bug in the world.
+    return f"({t.replace('.', ' ')})"
 
 
 def humanize(e, names: dict[str, str], places: dict[str, str]) -> dict:

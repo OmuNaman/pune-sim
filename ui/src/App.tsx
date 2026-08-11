@@ -8,20 +8,27 @@ import { setEpoch } from './lib/time'
 import { MapRoot } from './map/MapRoot'
 import { TopBar } from './panels/TopBar'
 import { TimelineStrip } from './panels/TimelineStrip'
+import { LeftRail } from './panels/LeftRail'
+import { Inspector } from './panels/Inspector'
 import { Panel } from './components/Panel'
 import { Logo } from './components/Logo'
 
 export default function App() {
   const [runId, setRunId] = useState<string | null>(null)
+  const [t, setT] = useState(0)
 
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
-  // Open the biggest run that has any days in it — on a machine with twenty
-  // ad-hoc run directories, the interesting one is the one with a city in it.
+  // Which run to open first. `?run=` wins so a link is shareable; otherwise
+  // the biggest one with days in it, because on a machine with twenty ad-hoc
+  // run directories the interesting one is the one with a city in it.
   useEffect(() => {
     if (runId || !runs.data) return
+    const asked = new URLSearchParams(location.search).get('run')
     const usable = runs.data.runs.filter((r) => r.days_done > 0)
     if (!usable.length) return
+    const hit = asked && usable.find((r) => r.id === asked || r.name === asked)
+    if (hit) return setRunId(hit.id)
     usable.sort((a, b) => b.households * b.days_done - a.households * a.days_done)
     setRunId(usable[0].id)
   }, [runs.data, runId])
@@ -64,6 +71,24 @@ export default function App() {
     void clock.open(m.id, r.order.length, Math.min(10.5 * 3600, m.max_t))
   }, [meta.data?.id, roster.data?.order.length])
 
+  // The panels need the time, but not at 60fps — they show minutes, not
+  // frames. Throttling here keeps React out of the animation loop entirely.
+  //
+  // Seeded with the clock's CURRENT value, not 0: this effect runs once on
+  // mount and `clock.open()` happens later, so a panel that only ever learns
+  // the time from the subscription sits at t=0 until the user touches
+  // something. That is how the feed spent its life asking for day 1 of a run
+  // whose playhead was on day 10.
+  useEffect(() => {
+    let last = -1e9
+    setT(clock.t)
+    return clock.subscribe((now) => {
+      if (Math.abs(now - last) < 60) return
+      last = now
+      setT(now)
+    })
+  }, [roster.data?.order.length])
+
   // Space plays, arrows step a day. A map app that needs the mouse for the
   // clock is a map app you drive with one hand tied.
   useEffect(() => {
@@ -93,6 +118,8 @@ export default function App() {
       <MapRoot meta={m} />
       <TopBar meta={m} people={people} runs={runs.data.runs.filter((r) => r.days_done > 0)}
               onPickRun={setRunId} />
+      <LeftRail runId={m.id} t={t} />
+      <Inspector runId={m.id} t={t} order={roster.data?.order} />
       {days.data && <TimelineStrip meta={m} days={days.data} />}
       {!roster.data && <Waking households={m.households} />}
     </div>

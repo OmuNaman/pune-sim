@@ -115,21 +115,30 @@ class LogView:
 
     # -- movement, one day at a time -------------------------------------- #
 
-    def segs_for_day(self, day: int) -> dict[str, list[Seg]]:
-        """Where everyone was, through one day.
+    def segs_for_day(self, day: int, *, person: str | None = None) -> dict[str, list[Seg]]:
+        """Where everyone was, through one day — or where ONE person was.
 
         Safe to build per day because everyone starts and ends the day at home —
         the same invariant `info.presence_intervals` is built on. Without it
         this would have to replay from day zero to know where anyone is.
+
+        `person` narrows it in SQL, and matters because a day at V3 scale is
+        224,544 movement rows. A dossier that wants one person's walk was
+        parsing all of them: 6.9 of the 10.5 seconds a person panel took. The
+        map still asks for the whole city, and caches it; a panel should not.
         """
-        hit = self._days.get(day)
-        if hit is not None:
-            self._days.move_to_end(day)
-            return hit
+        if person is None:
+            hit = self._days.get(day)
+            if hit is not None:
+                self._days.move_to_end(day)
+                return hit
         t0, t1 = day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY
-        events = self._rows(
-            "sim_time >= ? AND sim_time < ? AND type IN (?, ?, ?)", (t0, t1, *ROUTINE),
-        )
+        where = "sim_time >= ? AND sim_time < ? AND type IN (?, ?, ?)"
+        args: tuple = (t0, t1, *ROUTINE)
+        if person is not None:
+            where += " AND json_extract(payload, '$.person') = ?"
+            args = (*args, person)
+        events = self._rows(where, args)
         segs: dict[str, list[Seg]] = {}
         cur: dict[str, tuple[str, str | None]] = {}
         open_t: dict[str, int] = {}
@@ -161,6 +170,10 @@ class LogView:
                 cur[pid] = (e.payload.get("at", at), e.payload.get("activity"))
         for pid, (at, act) in cur.items():
             segs[pid].append(Seg(open_t[pid], t1, "at", at, None, act))
+        if person is not None:
+            # A one-person answer must NEVER land in the day cache: the map
+            # reads the same cache, and would draw a city of one.
+            return segs
         self._days[day] = segs
         while len(self._days) > DAYS_CACHED:
             self._days.popitem(last=False)
@@ -202,26 +215,56 @@ class LogView:
                 con.close()
         return self._types
 
-    def notable(self, limit: int = 4000) -> list[Row]:
+    def notable(self, limit: int = 4000, *, day: int | None = None) -> list[Row]:
         """The ticker's events: the log minus movement, gossip and bookkeeping.
 
         Asked as "these types" rather than "not those types", because a NOT IN
         can only be answered by reading every row — and movement is 99% of them.
+
+        `day` bounds it to one sim-day IN SQL. Filtering afterwards in Python
+        means fetching and parsing every notable event in the run to keep a
+        thirtieth of them: 2.2 s per day change on a 30-day log, every time the
+        playhead crosses midnight.
         """
         wanted = [t for t in self.types() if t not in _NOT_NOTABLE]
         if not wanted:
             return []
-        return self.of_type(*wanted, limit=limit)
+        return self.of_type(*wanted, limit=limit, day=day)
 
-    def of_type(self, *types: str, limit: int = 4000) -> list[Row]:
+    def of_type(self, *types: str, limit: int = 4000, day: int | None = None) -> list[Row]:
         holes = ",".join("?" * len(types))
-        return self._rows(f"type IN ({holes})", types)[-limit:]
+        where, args = f"type IN ({holes})", list(types)
+        if day is not None:
+            where += " AND sim_time >= ? AND sim_time < ?"
+            args += [day * SECONDS_PER_DAY, (day + 1) * SECONDS_PER_DAY]
+        return self._rows(where, tuple(args))[-limit:]
 
     def for_person(self, pid: str, types: tuple[str, ...], limit: int = 400) -> list[Row]:
-        """One person's events of a few types — filtered in Python after a
-        type-narrowed query, because the payload's person id is not a column."""
-        out = [e for e in self.of_type(*types, limit=1_000_000)
+        """One person's events of a few types.
+
+        The person id lives inside the payload rather than in a column, and the
+        obvious approach — fetch every row of these types, keep the ones whose
+        payload mentions them — costs 7.3 seconds to find ONE row at V3 scale,
+        because it parses 77,000 JSON blobs in Python to discard 76,999.
+
+        SQLite reads the blob without Python: `json_extract` narrows to the rows
+        where this person is the SUBJECT in 0.11s, 66x faster. The remaining
+        roles (a participant, a message recipient) are still matched afterwards
+        over the small result, because they live in arrays and a person can
+        appear in one without the event being about them.
+        """
+        holes = ",".join("?" * len(types))
+        rows = self._rows(
+            f"type IN ({holes}) AND ("
+            "  json_extract(payload, '$.person') = ?"
+            "  OR json_extract(payload, '$.sender') = ?"
+            "  OR instr(payload, ?) > 0)",
+            (*types, pid, pid, f'"{pid}"'),
+        )
+        out = [e for e in rows
                if e.payload.get("person") == pid
+               or e.payload.get("sender") == pid
                or pid in (e.payload.get("participants") or ())
+               or pid in (e.payload.get("recipients") or ())
                or e.payload.get("to") == pid]
         return out[-limit:]

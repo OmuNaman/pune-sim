@@ -18,3 +18,7 @@ export const useSelection = create<SelectionState>((set) => ({
   select: (sel) => set({ sel }),
   clear: () => set({ sel: { kind: 'none' } }),
 }))
+
+// A handle for ui/scripts — clicking a specific building on a WebGL canvas from
+// a test is guesswork; selecting one by id is not.
+;(globalThis as any).__select = (s: Selection) => useSelection.getState().select(s)

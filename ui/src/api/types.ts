@@ -80,6 +80,51 @@ export interface DaySummary {
   by_type: Record<string, number>
 }
 
+export interface PlaceDetail extends PlaceRow {
+  here: { id: string; name: string; activity: string }[]
+  here_n: number
+  today: EventLine[]
+}
+
+export interface HeardClaim {
+  t: number
+  hm: string
+  text: string
+  key: string
+  credence: number | null
+  channel: string
+  source_id: string | null
+  source: string | null
+  hop: number
+  ops: string[]
+}
+
+export interface PersonDossier {
+  id: string
+  ord: number
+  name: string
+  age: number
+  sex: string
+  occupation: string
+  religion: string
+  household: string
+  members: { id: string; name: string; age: number; occupation: string }[]
+  home: string
+  home_name: string
+  work: string | null
+  work_name: string
+  memories: { t: number; summary: string; salience: number }[]
+  moods: { t: number; dim: string; delta: number }[]
+  timeline: EventLine[]
+  interviews: { t: number; hm: string; question: string; answer: string }[]
+  heard: HeardClaim[]
+  trips: {
+    t0: number; t1: number; kind: string
+    a: string; a_name: string; b: string | null; b_name: string
+    activity: string | null
+  }[]
+}
+
 /** One decoded positions frame: parallel arrays indexed by person ordinal. */
 export interface Frame {
   t: number

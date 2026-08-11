@@ -20,14 +20,20 @@ def _world(request: Request, run_id: str):
 
 
 @router.get("/{run_id}/ticker")
-def ticker(request: Request, run_id: str, since_seq: int = 0, limit: int = 500):
+def ticker(request: Request, run_id: str, since_seq: int = 0, limit: int = 500,
+           day: int | None = None):
     """The log minus movement, gossip and bookkeeping.
 
     `since_seq` is what makes this the live tail: a client that has seen up to
     seq N asks for what came after, instead of re-reading the run.
+
+    `day` scopes it to one sim-day, and matters more than it looks: without it
+    the endpoint returns the LAST n events of the whole run, so a client sitting
+    on day 1 of a 30-day log filters a page full of day 29 down to nothing and
+    truthfully reports that nothing has happened.
     """
     _rec, w = _world(request, run_id)
-    rows = w.view.notable(limit=200_000)
+    rows = w.view.notable(limit=200_000, day=day)
     if since_seq:
         rows = [e for e in rows if e.seq > since_seq]
     rows = rows[-max(1, min(limit, 5000)):]
