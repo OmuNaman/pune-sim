@@ -11,11 +11,12 @@ V3's exit is two clauses:
 The cost half was met on 2026-08-08 at **$0.0031/sim-day** against a $2 bar. The
 other half had never been run. This is that run.
 
-**Result: 10 of 11 clauses pass, 0 fail, 1 not run.** The unrun one is V1-c, the
-30-day continuity soak, which four attempts could not get through before the
-environment killed them; the command to close it is below. Every other clause
-V0, V1 and V2 name is decided, at 12,000 households and 49,578 people, and none
-of them failed.
+**Result: 10 of 11 clauses pass, 1 fails.** Every clause V0, V1 and V2 name is
+now decided at 12,000 households and 49,578 people. The failure is V1-c, the
+30-day continuity soak — and it is the most valuable thing in this document,
+because it found a defect nothing shorter could: a hospitalised child written
+into his own front room for three consecutive mornings, committed to the event
+log as real activity. Details below.
 
 ## What had to be fixed before it could run at all
 
@@ -252,7 +253,60 @@ hand-written scenario file uses.
 "Zero new code" holds structurally: the run path takes any scenario file
 uniformly, which the ported `oldcity_dm_test.json` demonstrates.
 
-### V1-c — 30 sim-days, zero canon contradictions — NOT RUN
+### V1-c — 30 sim-days, zero canon contradictions — **FAIL**
+
+*Run 2026-08-11: 30 sim-days, 12,000 households, 49,578 people, 6,879,345
+events, across fourteen kills and thirteen resumes. Raw output:
+`runs/exit/soak/continuity.json`.*
+
+**The automated verdict said `PASS`. It was wrong, and reading it is how the
+real defect was found.**
+
+Three major canon contradictions, all one mechanism. A ten-year-old was hit by a
+car on day 5 and admitted to Manish Clinic at 12:05; he was not discharged until
+10:00 on day 8. On days 6, 7 and 8 the morning scenes put him at home — not
+ambiguously:
+
+| day | the scene | canon |
+|---|---|---|
+| Wed 7 Jan | *"The Thorat **household** … Sharvari moves between the **kitchen** and the clinic phone number"*, and *"To aaj **ghari** visram karat ahe"* — he is resting **at home** today | admitted since Tue 12:05 |
+| Thu 8 Jan | *"the dusty window of the Thorat **home** … Suhas (muffled, **from the other room**)"* | still admitted |
+| Fri 9 Jan **06:30** | *"Suhas is still resting his leg on the divan"* | discharged at **10:00** — still admitted at 06:30 |
+
+And it is not only prose. Those scenes wrote **plan overrides that the engine
+committed as real events**: `activity.start "wake up, rest on divan"` on day 6,
+`"rest and recover at home"` on day 8. The log itself records an admitted
+patient at home.
+
+**Cause.** `state.proc.in_hospital` is used by `engine/bend.py::_apply_stays` to
+bend the clockwork, and is **never given to the scene prompt** — `context.py`
+contains no reference to hospitalisation at all. The model wrote a plausible
+domestic morning because nothing in its context said the child was in a ward.
+`_apply_stays` also lets scene-revised plans win by design ("Scene-revised plans
+(skip) win, as everywhere"), so nothing downstream caught it either.
+
+**Second finding, about the instrument rather than the world.** The first-pass
+reader caught all three. The independent skeptic refuted all three — once by
+asserting *"Day 7 is Monday 12 Jan 2026, well after Suhas's discharge"* when day
+0 is Thursday 1 January and day 7 is Thursday the 8th. **It invented a date to
+refute a true finding.** Its instruction is "when unsure, refute — a false alarm
+is worse than a miss", and that bias produced a miss on the clause it exists to
+decide. A `PASS` from this tool is worth what its refutations are worth, and
+those must be read.
+
+**Why five days could not have found this.** The V0 run's crash was on day 1
+with a two-day stay; the contradiction needs a stay that is still open on the
+following mornings *and* scenes rendered into it. Thirty days is what the clause
+asks for and thirty days is what it took.
+
+**Fix in progress**, and deliberately not a veto: the scene lane is being given
+the physical facts (who is admitted, where, until when) rather than being
+forbidden to contradict them. A scene that knows the child is in Manish Clinic
+writes the mother at the ward, which is truer than a scene that was overruled.
+
+---
+
+### V1-c — the earlier attempts, for the record
 
 The one clause of eleven that has no verdict. Not because it failed: because
 four separate attempts to run the 30-day soak were killed by the environment
