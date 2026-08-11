@@ -1,157 +1,155 @@
-PROPRIETARY — ALL RIGHTS RESERVED
+PROPRIETARY SOFTWARE — ALL RIGHTS RESERVED
 
 Copyright (c) 2026 Naman (github.com/OmuNaman). All rights reserved.
 
-This is not a licence. No right to use this work is granted by it. It exists to
-state, expressly and in a form that can be read by a person or a machine, that
-the rights in this work are reserved.
+This software, source code, data, assets and accompanying documentation
+(collectively, the "Work") are made publicly visible for reading and review
+only. No licence, express or implied, by estoppel, exhaustion, acquiescence or
+otherwise, is granted to any party. Public visibility is not publication into
+the public domain, is not a waiver of any right, and is not an offer to
+licence.
 
 --------------------------------------------------------------------------------
-1. SCOPE
+1. DEFINITIONS
 --------------------------------------------------------------------------------
 
-"the Work" means the source code, documentation, configuration, prose and other
-original material in this repository, excluding the third-party material
-identified in section 7.
-
-"the Rightsholder" means the copyright holder named above.
+1.1  "Rightsholder" means the copyright holder named above.
+1.2  "Work" has the meaning given above and EXCLUDES the third-party material
+     identified in Clause 6.
+1.3  "You" means any natural or legal person accessing the Work.
+1.4  "TDM" means text and data mining, being any automated analytical technique
+     applied to the Work to analyse it in digital form so as to generate
+     information, including but not limited to patterns, trends, correlations,
+     embeddings, weights or model parameters.
 
 --------------------------------------------------------------------------------
 2. RESERVATION OF RIGHTS
 --------------------------------------------------------------------------------
 
-All rights in the Work are reserved to the Rightsholder under the Copyright Act,
-1957 (India), the Berne Convention, and the copyright law of every jurisdiction
-in which the Work is protected.
-
-No licence, express or implied, and no right by estoppel, exhaustion,
-acquiescence or otherwise, is granted to any person to do any of the following
-without the Rightsholder's prior written permission:
-
-  (a) use the Work, in whole or in part, for any purpose, commercial or
-      non-commercial, private or public;
-  (b) reproduce, publish, mirror or distribute the Work, other than as
-      described in section 3;
-  (c) adapt, translate or modify the Work, or create any derivative work from
-      it;
-  (d) incorporate any part of the Work into another work, product, dataset,
-      model or service;
-  (e) sublicense, sell, rent, lease or otherwise transfer any interest in the
-      Work.
-
-Making the Work publicly visible is not publication into the public domain, is
-not a waiver of any right, and is not an invitation to use it.
+2.1  All right, title and interest in the Work, including all copyright and
+     related rights, vests in and is retained by the Rightsholder.
+2.2  All rights are reserved under the Copyright Act, 1957 (India), the Berne
+     Convention for the Protection of Literary and Artistic Works, the TRIPS
+     Agreement, and the copyright law of every jurisdiction in which the Work is
+     protected.
+2.3  No right is granted by implication, and no course of conduct, silence, or
+     failure to enforce shall constitute a licence or a waiver.
 
 --------------------------------------------------------------------------------
-3. WHAT GITHUB'S TERMS ALREADY GRANT, AND WHAT THEY DO NOT
+3. EXPRESS PROHIBITIONS
 --------------------------------------------------------------------------------
 
-The Rightsholder hosts this repository publicly on GitHub and therefore, under
-GitHub's Terms of Service (Section D.5, "License Grant to Other Users"), has
-granted every GitHub user a non-exclusive, worldwide licence to use, display and
-perform this content through the GitHub Service and to reproduce it *solely on
-GitHub* as permitted through GitHub's functionality — for example, by forking.
+WITHOUT THE PRIOR EXPRESS WRITTEN PERMISSION OF THE RIGHTSHOLDER, YOU MAY NOT:
 
-That grant is acknowledged and is not disputed. Viewing this repository on
-GitHub, and forking it on GitHub, are permitted by it.
-
-It is also the entire extent of what is permitted. By its own terms that licence
-reaches only reproduction *on GitHub, through GitHub's functionality*. It does
-not grant any right to use, run, adapt, or redistribute the Work off the
-platform, nor to incorporate it into anything else, nor to mine it under
-section 4. Those rights remain reserved under section 2.
-
-Nothing in this file purports to remove, limit or override any right granted by
-GitHub's Terms of Service. Where this file and those Terms would conflict, those
-Terms prevail and this file is to be read as reserving only what remains.
-
---------------------------------------------------------------------------------
-4. EXPRESS RESERVATION AGAINST TEXT AND DATA MINING AND AI TRAINING
---------------------------------------------------------------------------------
-
-The Rightsholder EXPRESSLY RESERVES the right to carry out text and data mining
-of the Work, and PROHIBITS its use as, or its inclusion in, any corpus, dataset
-or input used to train, fine-tune, evaluate, ground, retrieve against or
-otherwise develop any machine learning model, artificial intelligence system,
-large language model or generative system.
-
-This reservation is made, and is intended to take effect, specifically:
-
-  - as the express reservation "in an appropriate manner, such as machine-
-    readable means" required by Article 4(3) of Directive (EU) 2019/790 on
-    copyright and related rights in the Digital Single Market, and by the
-    national laws implementing it, so that the exception in Article 4(1) does
-    not apply to the Work;
-  - as a reservation for the purposes of section 44b(3) of the German
-    Urheberrechtsgesetz and equivalent implementing provisions elsewhere in the
-    European Economic Area;
-  - as a withholding of consent for the purposes of any UK text and data mining
-    exception; and
-  - as a reservation of all rights under 17 U.S.C. and any other applicable
-    copyright statute.
-
-A machine-readable statement of this reservation, in the TDM Reservation
-Protocol format, is provided at `.well-known/tdmrep.json` in this repository.
-Its presence and this section are to be read together; either alone is
-sufficient notice.
+3.1  Use, execute, run, host or deploy the Work, in whole or in part, for any
+     purpose whatsoever, whether commercial, non-commercial, academic, research,
+     evaluative or personal;
+3.2  Copy, reproduce, publish, mirror, redistribute, transmit or frame the Work,
+     save as permitted by Clause 5;
+3.3  Modify, transform, adapt, translate, decompile, or create derivative works
+     from the Work;
+3.4  Incorporate, embed, bundle or link any part of the Work into any other
+     work, product, software, database, dataset, model or service;
+3.5  Subject the Work, or any portion of it, to TDM, or use it to train,
+     fine-tune, pre-train, distil, align, evaluate, benchmark, ground, index or
+     retrieve against any machine learning model, artificial intelligence
+     system, large language model, generative system or retrieval-augmented
+     generation corpus;
+3.6  Sublicense, sell, rent, lease, assign, pledge or otherwise transfer any
+     right in or to the Work;
+3.7  Remove, alter, obscure or falsify this notice, any copyright notice, or any
+     attribution contained in the Work.
 
 --------------------------------------------------------------------------------
-5. GOVERNING LAW AND JURISDICTION
+4. TEXT AND DATA MINING — EXPRESS RESERVATION
 --------------------------------------------------------------------------------
 
-This notice, and any dispute or claim arising out of or in connection with it or
-with the Work (including non-contractual disputes or claims), is governed by and
-construed in accordance with the laws of India.
-
-The courts at Pune, Maharashtra, India shall have exclusive jurisdiction, save
-that the Rightsholder may bring proceedings for infringement, or seek injunctive
-or other urgent relief, in any court of competent jurisdiction in any country in
-which infringement occurs or is threatened.
-
-Nothing in this section deprives a consumer of the protection of the mandatory
-law of their country of residence.
-
---------------------------------------------------------------------------------
-6. PERMISSION
---------------------------------------------------------------------------------
-
-Permission for anything reserved above may be requested from the Rightsholder
-through the contact details on the GitHub profile named above. Absent a signed
-written grant, no permission exists. Silence is not permission.
-
---------------------------------------------------------------------------------
-7. THIRD-PARTY MATERIAL — NOT COVERED BY THE ABOVE
---------------------------------------------------------------------------------
-
-Sections 2 and 4 cover the Rightsholder's own original material only. This
-repository also vendors third-party material under `data/anchors/`, which is NOT
-covered by them and remains subject to the terms of its own originators. It is
-catalogued, with sources and checksums, in `data/anchors/MANIFEST.md`, and
-includes without limitation:
-
-  - OpenStreetMap extracts (`*_places.geojson`, `*_roads.geojson`,
-    `osm_*_raw.json`) — (c) OpenStreetMap contributors, made available under the
-    Open Database Licence (ODbL) v1.0. Used under that licence; nothing here
-    relicenses them or purports to restrict rights the ODbL grants.
-  - Census and municipal tables from data.opencity.in and the Pune Municipal
-    Corporation, published as public-domain open data.
-  - A GTFS extract obtained from a third-party repository.
-  - `gadgil_poona_survey_part1.pdf` — D. R. Gadgil, "Poona: A Socio-Economic
-    Survey, Part I — Economic", a scan from the Internet Archive's Digital
-    Library of India collection, reproduced here for reference. The Rightsholder
-    claims no copyright in it and asserts no rights over it.
-
-Nothing in this file grants, restricts or otherwise affects any right in that
-third-party material.
+4.1  The Rightsholder EXPRESSLY RESERVES the right to carry out TDM of the Work
+     and withholds consent to all TDM by any other party.
+4.2  This Clause constitutes an express reservation of rights in an appropriate
+     manner, including by machine-readable means, for the purposes of Article
+     4(3) of Directive (EU) 2019/790 on Copyright and Related Rights in the
+     Digital Single Market, with the effect that the exception in Article 4(1)
+     does not apply to the Work.
+4.3  This Clause further constitutes a reservation for the purposes of § 44b(3)
+     of the German Urheberrechtsgesetz and all equivalent implementing
+     provisions throughout the European Economic Area, a withholding of consent
+     for the purposes of any United Kingdom TDM exception, and a reservation of
+     all rights under Title 17 of the United States Code and any other
+     applicable copyright statute.
+4.4  A machine-readable expression of this reservation, in TDM Reservation
+     Protocol format, is published at `.well-known/tdmrep.json`. Clause 4 and
+     that file are to be read together; either alone constitutes sufficient
+     notice.
+4.5  Unauthorised crawling, scraping or ingestion of the Work for the purposes
+     described in Clause 3.5 constitutes copyright infringement.
 
 --------------------------------------------------------------------------------
-8. SEVERABILITY AND NO WAIVER
+5. PLATFORM VISIBILITY AND FORKING
 --------------------------------------------------------------------------------
 
-If any provision of this notice is held unenforceable in any jurisdiction, it is
-severed to the minimum extent necessary and the remainder continues in force in
-that jurisdiction and in full elsewhere. No failure or delay in enforcing any
-right is a waiver of it.
+5.1  Incidental caching and temporary reproduction necessary to view the Work
+     through GitHub's web interface is permitted.
+5.2  The Rightsholder acknowledges that, by hosting the Work in a public
+     repository, GitHub's Terms of Service grant each GitHub user a licence to
+     use, display and perform the Work through the GitHub Service and to
+     reproduce it SOLELY ON GITHUB as permitted through GitHub's functionality,
+     including by forking. Nothing in this notice purports to remove, limit or
+     override that grant, and to the extent of any conflict that grant prevails.
+5.3  That grant is exhaustive of what is permitted on-platform. Any such fork is
+     strictly limited to hosting on GitHub, conveys NO licence to use, execute,
+     modify, distribute or mine the Work, and remains subject in full to
+     Clauses 3 and 4.
+
+--------------------------------------------------------------------------------
+6. THIRD-PARTY MATERIAL
+--------------------------------------------------------------------------------
+
+6.1  Clauses 2 to 4 apply to the Rightsholder's own original material only.
+6.2  The repository vendors third-party material under `data/anchors/`, which is
+     NOT covered by this notice and remains subject to the licences of its
+     original authors, catalogued with sources and checksums in
+     `data/anchors/MANIFEST.md`, including:
+     (a) OpenStreetMap extracts (`*_places.geojson`, `*_roads.geojson`,
+         `osm_*_raw.json`) — (c) OpenStreetMap contributors, Open Database
+         Licence (ODbL) v1.0;
+     (b) Census and municipal tables — data.opencity.in and the Pune Municipal
+         Corporation, published as open data;
+     (c) A GTFS extract obtained from a third-party repository;
+     (d) `gadgil_poona_survey_part1.pdf` — D. R. Gadgil, "Poona: A
+         Socio-Economic Survey, Part I — Economic", from the Internet Archive's
+         Digital Library of India collection.
+6.3  Nothing in this notice grants, restricts or otherwise affects any right in
+     that third-party material, nor purports to restrict any right the ODbL
+     confers.
+
+--------------------------------------------------------------------------------
+7. PERMISSION
+--------------------------------------------------------------------------------
+
+7.1  Permission to use or licence the Work may be requested from the
+     Rightsholder via the contact details published on the GitHub profile named
+     above.
+7.2  In the absence of a formal, signed written agreement, no permission exists.
+
+--------------------------------------------------------------------------------
+8. GOVERNING LAW, JURISDICTION AND SEVERABILITY
+--------------------------------------------------------------------------------
+
+8.1  This notice, and any dispute or claim arising out of or in connection with
+     it or with the Work, whether contractual or non-contractual, shall be
+     governed by and construed in accordance with the laws of India.
+8.2  The courts at Pune, Maharashtra, India shall have exclusive jurisdiction,
+     save that the Rightsholder may bring proceedings for infringement, or seek
+     injunctive or other urgent relief, before any court of competent
+     jurisdiction in any territory in which infringement occurs or is
+     threatened.
+8.3  If any provision of this notice is held invalid or unenforceable in any
+     jurisdiction, it shall be severed to the minimum extent necessary and all
+     remaining provisions shall continue in full force and effect in that
+     jurisdiction and without limitation elsewhere.
+8.4  No failure or delay by the Rightsholder in exercising any right shall
+     operate as a waiver of it.
 
 --------------------------------------------------------------------------------
 9. NO WARRANTY
@@ -163,11 +161,3 @@ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE RIGHTSHOLDER BE
 LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE WORK
 OR THE USE OR OTHER DEALINGS IN THE WORK.
-
---------------------------------------------------------------------------------
-
-This notice was drafted with the assistance of an AI system and has not been
-reviewed by a lawyer. It is a statement of the Rightsholder's intent, not legal
-advice. If the Work becomes commercially significant, have a qualified solicitor
-review it — in particular sections 3, 4 and 5, which turn on facts about where
-the Rightsholder and any infringer are situated.

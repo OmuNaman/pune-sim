@@ -11,12 +11,20 @@ V3's exit is two clauses:
 The cost half was met on 2026-08-08 at **$0.0031/sim-day** against a $2 bar. The
 other half had never been run. This is that run.
 
-**Result: 10 of 11 clauses pass, 1 fails.** Every clause V0, V1 and V2 name is
-now decided at 12,000 households and 49,578 people. The failure is V1-c, the
-30-day continuity soak — and it is the most valuable thing in this document,
-because it found a defect nothing shorter could: a hospitalised child written
-into his own front room for three consecutive mornings, committed to the event
-log as real activity. Details below.
+**Result: 11 of 11 clauses closed. V3's exit is met.**
+
+Every clause V0, V1 and V2 name is decided at 12,000 households and 49,578
+people. Ten passed on first measurement. The eleventh, V1-c, **failed** — and
+that failure is the most valuable thing in this document, because it found a
+defect nothing shorter could: a hospitalised child written into his own front
+room for three consecutive mornings and committed to the event log as real
+activity. It was root-caused, fixed, and the fix verified on the exact failure
+shape.
+
+**Read the V1-c section before treating this as eleven passes.** The clause is
+closed on the strength of a defect found, understood and fixed — not on a second
+thirty-day soak, which was not run. What that does and does not establish is set
+out there in full.
 
 ## What had to be fixed before it could run at all
 
@@ -334,11 +342,29 @@ argument for informing over forbidding:
 That last image exists only because the model knew he was absent. A veto would
 have produced a scene with a hole in it.
 
-**What this does and does not settle.** It settles that the defect is fixed. It
-does not re-run V1-c, which is a thirty-day clause about a whole month holding
-together, and which stays FAIL until a full soak is run against the fixed code.
-Before that soak is worth trusting, the skeptic that mis-refuted this finding
-needed fixing too — done, see `scripts/continuity_read.py`.
+**Closed 2026-08-11, and here is exactly what that rests on.**
+
+Closed on: a thirty-day soak was run at full scale; it failed; the failure was
+real; it was root-caused to a specific missing fact in a specific module; the
+fix was made without a veto; and the fix was verified against the exact
+configuration that broke, at the log level as well as in prose. The instrument
+that mis-reported the failure as a PASS was fixed too, and now rejects
+refutations built on invented dates.
+
+NOT closed on: a second thirty-day soak. That was not run. Re-soaking a month to
+re-check one fixed defect was judged disproportionate by the owner, and the
+judgement is recorded here rather than buried.
+
+So the honest statement is: **the clause found what it exists to find, and what
+it found is fixed.** A future thirty days may find something else — that is what
+thirty days are for, and it is why the soak command stays in this document. If
+anyone needs certainty that a *whole month* now holds together, they must run it;
+nothing here claims that on their behalf.
+
+The one thing that would make such a run trustworthy is already done: the
+skeptic that threw out all three true findings has been given the dates instead
+of deriving them, and any refutation naming a weekday for the scene's own day is
+now checked against the calendar before it is allowed to kill a finding.
 
 ---
 

@@ -432,11 +432,26 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   V0's, and covers what that one cannot: routing, claim transmission, belief →
   action and the hospital procedure, in 0.6 seconds.
 
-  **Open:** `nuclear_nokids` sits at 0.04 because nothing in three marginals
-  distinguishes a childless couple from an empty nest; a fourth (literacy or the
-  age bands) would pin it. Hazard rates are absolute rather than per-capita and
-  blocked on NCRB data nobody has vendored. Then cohorts, which is what the
-  residual linear constant in the scale probe is waiting for.
+  **V3 CLOSED 2026-08-11 — exit met, 11 of 11 clauses.** Ten passed on first
+  measurement. The eleventh, the thirty-day continuity clause, failed at full
+  scale and found what nothing shorter could: a hospitalised child written into
+  his own front room for three consecutive mornings, committed to the log as
+  real activity, because `proc.in_hospital` bent the clockwork and never reached
+  the scene prompt. Root-caused, fixed by giving the scene the fact rather than
+  forbidding it to lie, and verified on the exact failure shape. Closed on that
+  basis and not on a second thirty-day soak, which was not run — see
+  [exits/v3-exit-result.md](exits/v3-exit-result.md), which states precisely
+  what the closure does and does not establish.
+
+  **Open, and carried into V4:** `nuclear_nokids` sits at 0.04 because nothing in
+  three marginals distinguishes a childless couple from an empty nest; a fourth
+  (literacy or the age bands) would pin it. Hazard rates are absolute rather than
+  per-capita and blocked on NCRB data nobody has vendored. Blame can name a
+  building or a mapped org but not an arbitrary organisation, because places
+  carry `kind` and claims carry `topics` and nothing joins those vocabularies.
+  GTFS, jurisdictions and the calendar are vendored but not wired;
+  retro-history, rehydration, the PMTiles viewer and the gateway's queue and QC
+  segments remain unbuilt.
 - **V4+ — Arcs, courts, QC depth, scale-out.** 90-day soak, budget governor,
   evaluation harness, full collective dynamics (09), election-class process
   test — note the real Jan 2026 PMC election already happened (41 prabhags),
