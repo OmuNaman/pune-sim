@@ -107,7 +107,44 @@ Confirm it — refuted=false — only when canon RULES OUT what the scene says: 
 different time of day, a person canon says does not exist or is elsewhere, a state canon
 contradicts. When you are unsure, refute. A false alarm is worse than a miss here.
 
+NEVER CALCULATE A DATE. The scene's date and weekday are given to you above the claim, and every
+canon line carries its own. If your refutation depends on which day of the week something fell
+on, or on how many days apart two things were, use the dates as printed — do not derive them.
+A refutation built on a date you worked out yourself is not a refutation, it is a guess, and
+this check exists precisely because one of those let a real contradiction through: it asserted
+"day 7 is Monday 12 Jan, well after the discharge" when day 7 was Thursday the 8th and the
+patient was still in a hospital bed.
+
+"When unsure, refute" applies to JUDGEMENT — whether a limp counts as a contradiction of a
+healed injury. It does not licence inventing a fact. If you cannot refute the claim from what
+is printed in front of you, answer refuted=false.
+
 Reply with ONE JSON object: {"refuted": true|false, "why": "one sentence"}"""
+
+
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+
+
+def _bad_weekday(why: str, day: int) -> str | None:
+    """Does this refutation name a weekday for the scene's day, and get it wrong?
+
+    Narrow on purpose. It only fires when the sentence ties a weekday to *this
+    day number* — "day 7 is Monday" — because a refutation may legitimately
+    mention other days ("canon shows the discharge on Friday") and flagging
+    those would make the guard useless. Returns the complaint, or None."""
+    real = _WEEKDAYS[to_datetime(day * SECONDS_PER_DAY).weekday()]
+    low = " ".join((why or "").lower().split())
+    for pattern in (f"day {day} is ", f"day {day} was ", f"day {day} falls on ",
+                    f"day {day}, ", f"day {day} ("):
+        i = low.find(pattern)
+        if i < 0:
+            continue
+        tail = low[i + len(pattern): i + len(pattern) + 60]
+        for wd in _WEEKDAYS:
+            if wd in tail and wd != real:
+                return (f"it says day {day} is {wd.capitalize()}; day {day} is "
+                        f"{real.capitalize()}")
+    return None
 
 
 class Verdict(BaseModel):
@@ -381,16 +418,22 @@ def main() -> int:
     survived: list[Finding] = []
     refuted: list[tuple[Finding, str]] = []
     for f in [x for x in findings if x.scope != "texture"]:
+        # The claim used to be labelled "day 7" and nothing else, while every
+        # canon line carries a real date — so the skeptic had to do the
+        # arithmetic itself, and once it got it wrong ("day 7 is Monday 12 Jan")
+        # it refuted a true finding with an invented fact. Print the date.
+        scene_dt = to_datetime(f.day * SECONDS_PER_DAY)
         body = "\n".join([
             "CANON:",
             *canon_by_day[max(canon_by_day)],
             "",
-            f"CLAIMED ERROR (day {f.day}, {f.kind}):",
+            f"CLAIMED ERROR — the scene is on day {f.day}, which is "
+            f"{scene_dt:%A %d %B %Y}. ({f.kind})",
             f"  scene says : {f.quote}",
             f"  canon line : {f.canon}",
             f"  reasoning  : {f.why}",
             "",
-            "Try to refute it.",
+            "Try to refute it. Use the dates as printed; do not calculate any.",
         ])
         try:
             v = gw.call(
@@ -402,6 +445,15 @@ def main() -> int:
         except Exception as err:  # noqa: BLE001 — an unverifiable finding stands
             survived.append(f)
             refuted.append((f, f"verifier failed ({type(err).__name__}) — kept"))
+            continue
+        bad_date = _bad_weekday(v.why, f.day)
+        if v.refuted and bad_date:
+            # A refutation is only worth what its facts are worth. If it names a
+            # weekday for this scene and names the wrong one, its reasoning is
+            # built on something untrue, so the finding stands and the reason is
+            # recorded. This is the exact failure it exists to catch.
+            survived.append(f)
+            refuted.append((f, f"REFUTATION REJECTED — {bad_date}. Original: {v.why}"))
             continue
         (refuted.append((f, v.why)) if v.refuted else survived.append(f))
     canon_hits = survived

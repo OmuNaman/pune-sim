@@ -1,0 +1,60 @@
+PROPRIETARY — ALL RIGHTS RESERVED
+
+Copyright (c) 2026 Naman (github.com/OmuNaman). All rights reserved.
+
+This software and its accompanying documentation (the "Work") are made publicly
+visible for reading only. No licence of any kind is granted, expressly or by
+implication, estoppel, or otherwise.
+
+WITHOUT THE PRIOR WRITTEN PERMISSION OF THE COPYRIGHT HOLDER, YOU MAY NOT:
+
+  - use the Work, in whole or in part, for any purpose, commercial or
+    non-commercial;
+  - copy, reproduce, publish, mirror, or redistribute the Work;
+  - modify the Work or create derivative works from it;
+  - incorporate any part of the Work into another work, product, model, or
+    service;
+  - use the Work, or any part of it, as training data for, or as input to, any
+    machine learning or artificial intelligence system;
+  - sublicense, sell, rent, lease, or otherwise transfer any rights in the Work;
+  - remove or alter this notice.
+
+Viewing this repository through GitHub's web interface, and the incidental
+copying performed by your browser or by GitHub in order to display it, is
+permitted. Cloning or forking for any purpose beyond that is not.
+
+Permission may be requested from the copyright holder. Absent a signed written
+grant, no permission exists.
+
+THIRD-PARTY MATERIAL
+
+This reservation of rights covers the original code and documentation only. The
+repository also vendors third-party material under `data/anchors/`, which is NOT
+covered by the terms above and remains subject to the terms of its own
+originators. That material is catalogued, with its sources, in
+`data/anchors/MANIFEST.md`. It includes, without limitation:
+
+  - OpenStreetMap extracts (`*_places.geojson`, `*_roads.geojson`,
+    `osm_*_raw.json`) — (c) OpenStreetMap contributors, licensed under the Open
+    Database License (ODbL). These are used under that licence and are not
+    relicensed by this file.
+  - Census and municipal tables sourced from data.opencity.in and the Pune
+    Municipal Corporation.
+  - A GTFS extract scraped from a third-party repository.
+  - `gadgil_poona_survey_part1.pdf`, a scanned copy of D. R. Gadgil, "Poona: A
+    Socio-Economic Survey, Part I — Economic", obtained from the Internet
+    Archive's Digital Library of India collection. It is reproduced here for
+    reference; the copyright holder makes no claim to it and asserts no rights
+    over it.
+
+Nothing in this file is intended to grant, restrict, or otherwise affect any
+right in that third-party material.
+
+NO WARRANTY
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER
+BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+WORK OR THE USE OR OTHER DEALINGS IN THE WORK.
