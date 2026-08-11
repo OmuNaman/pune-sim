@@ -13,12 +13,14 @@ from .context import (
     build_messages,
     build_reaction_messages,
     memory_digest,
+    physical_state,
     recent_notable_events,
     witnessed_facts,
 )
 from .prompt import (
     _ROUTINE_TYPES,
     _SELF_OUTPUT_TYPES,
+    PHYSICAL_HEADER,
     REACTION_TASK,
     SCENE_HOUR_S,
     SYSTEM,
@@ -36,6 +38,7 @@ from .render import (
 from .run import compile_plan_overrides, run_morning_scenes, run_reaction_scene
 
 __all__ = [
+    "PHYSICAL_HEADER",
     "REACTION_TASK",
     "SCENE_HOUR_S",
     "SYSTEM",
@@ -55,6 +58,7 @@ __all__ = [
     "compile_plan_overrides",
     "held_memories",
     "memory_digest",
+    "physical_state",
     "recent_notable_events",
     "run_morning_scenes",
     "run_reaction_scene",

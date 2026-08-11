@@ -129,7 +129,7 @@ def run_simulation(
                     total += 1
             results = run_morning_scenes(
                 log, gateway, state.canon, state.registry, block, households, people, day,
-                chosen_ids=chosen,
+                chosen_ids=chosen, proc=state.proc,
             )
             for hid in chosen:  # a spent slot counts, skipped scenes included
                 state.attention.mark_rendered(hid, day)
@@ -257,6 +257,7 @@ def run_simulation(
                         run_reaction_scene(
                             log, gateway, state.canon, state.registry, block,
                             hh_by_id[hid], people, day, now_abs=reactions[hid],
+                            proc=state.proc,
                         )
                     )
                 except CassetteMiss:

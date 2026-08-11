@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from ...kernel.facts import Canon, PredicateRegistry
 from ...kernel.log import EventIn, EventLog
 from ...kernel.timebase import SECONDS_PER_DAY
@@ -10,11 +12,15 @@ from .context import (
     build_messages,
     build_reaction_messages,
     memory_digest,
+    physical_state,
     recent_notable_events,
     witnessed_facts,
 )
 from .prompt import SCENE_HOUR_S, SceneResult
 from .render import held_memories
+
+if TYPE_CHECKING:  # the scene lane reads institution state; it never writes it
+    from ...institutions.procedures import ProcState
 
 
 def compile_plan_overrides(
@@ -46,6 +52,7 @@ def run_morning_scenes(
     day: int,
     *,
     chosen_ids: list[str],
+    proc: "ProcState",
 ) -> list[SceneResult]:
     from ...llm.gateway import CassetteMiss
 
@@ -60,7 +67,8 @@ def run_morning_scenes(
         )
         memories = memory_digest(log, members, day, block, until=sim_time, people=people)
         witnessed = witnessed_facts(log, members, day, block, until=sim_time, people=people)
-        msgs = build_messages(block, hh, people, day, recent, memories, witnessed)
+        physical = physical_state(proc, members, day, block, now_abs=sim_time, people=people)
+        msgs = build_messages(block, hh, people, day, recent, memories, witnessed, physical)
         try:
             res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=sim_time)
         except CassetteMiss:
@@ -90,6 +98,7 @@ def run_reaction_scene(
     people: dict[str, Person],
     day: int,
     now_abs: int,
+    proc: "ProcState",
 ) -> SceneResult:
     """T2 event-driven scene: the household reacts the moment it learns —
     the mid-day lane the morning gate cannot provide (09 break B9, V0-thin)."""
@@ -99,8 +108,9 @@ def run_reaction_scene(
     )
     memories = memory_digest(log, members, day, block, until=now_abs, people=people)
     witnessed = witnessed_facts(log, members, day, block, until=now_abs, people=people)
+    physical = physical_state(proc, members, day, block, now_abs=now_abs, people=people)
     msgs = build_reaction_messages(
-        block, household, people, day, recent, now_abs, memories, witnessed
+        block, household, people, day, recent, now_abs, memories, witnessed, physical
     )
     res = gateway.call("scene", msgs, WorldDelta, temperature=0.6, max_tokens=2000, sim_time=now_abs)
     seq = apply_delta(

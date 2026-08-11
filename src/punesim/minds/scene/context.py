@@ -1,9 +1,21 @@
+from typing import TYPE_CHECKING
+
+from ...institutions.catalog import DISCHARGE_HOUR_S
 from ...kernel.log import EventLog
 from ...kernel.timebase import SECONDS_PER_DAY, to_datetime
 from ...population.synth import Household, Person
 from ...world.block import Block
-from .prompt import _ROUTINE_TYPES, _SELF_OUTPUT_TYPES, REACTION_TASK, SYSTEM
+from .prompt import (
+    _ROUTINE_TYPES,
+    _SELF_OUTPUT_TYPES,
+    PHYSICAL_HEADER,
+    REACTION_TASK,
+    SYSTEM,
+)
 from .render import _humanize, _when, _who
+
+if TYPE_CHECKING:  # the scene lane reads institution state; it never writes it
+    from ...institutions.procedures import ProcState
 
 
 def recent_notable_events(
@@ -162,6 +174,79 @@ def memory_digest(
     return lines
 
 
+def _place_name(block: Block, place_id: str) -> str:
+    p = block.get(place_id) if place_id else None
+    return f"{p.name} [{place_id}]" if p is not None and p.name else (place_id or "the hospital")
+
+
+def physical_state(
+    proc: "ProcState",
+    member_ids: set[str],
+    day: int,
+    block: Block,
+    *,
+    now_abs: int,
+    people: dict[str, Person] | None = None,
+) -> list[str]:
+    """Where these bodies actually are today — the constraint no scene may write
+    around.
+
+    The 30-day soak at 12,000 households admitted a 10-year-old to a ward on day
+    5 and kept him there until day 8, and on days 6, 7 and 8 his household's
+    morning scene put him on the divan at home, in his mother's own words
+    ("to aaj ghari visram karat ahe"). Those scenes then wrote day_plan
+    overrides that the engine committed as real `activity.start` events, so the
+    log itself said an admitted patient was at home.
+
+    Nothing was wrong with the engine's bookkeeping: `_apply_stays` bends the
+    clockwork off `proc.in_hospital` correctly, and scene-revised plans beat it
+    by design. What was wrong is that the ward existed only in `ProcState` and
+    never in the prompt — `RECENT EVENTS` reaches back one day, so the admission
+    fell out of view on day 7 and the model, told nothing, wrote the plausible
+    domestic morning. The fix is not a veto in the compiler; it is telling the
+    actors the fact, so they write the true thing themselves.
+
+    The conditions here mirror `engine.bend._apply_stays` deliberately, including
+    its precedence — hospital first, convalescence only for someone not in a ward
+    — because a prompt that disagreed with the compiler would just be a second,
+    politer contradiction. The one thing it adds is the discharge morning: at
+    06:30 on the day of a 10:00 discharge the patient is still in the ward, which
+    is the case that produced "Suhas is still resting his leg on the divan" on
+    the very morning he was in a hospital bed.
+    """
+    lines: list[str] = []
+    for pid in sorted(member_ids):
+        who = _who(pid, people, block)
+        # Membership, not a (0, "") default: `day == until` is the discharge
+        # morning, and a default of 0 makes day 0 the discharge morning for
+        # every healthy person alive — which is exactly what it did the first
+        # time this was written.
+        stay = proc.in_hospital.get(pid)
+        if stay is not None:
+            until, place = stay
+            if day < until:
+                lines.append(
+                    f"- {who} is in a hospital bed at {_place_name(block, place)}. Not at"
+                    f" home, not at work or school: admitted until"
+                    f" {to_datetime(until * SECONDS_PER_DAY):%A %d %B}."
+                )
+                continue
+            if day == until and now_abs < day * SECONDS_PER_DAY + DISCHARGE_HOUR_S:
+                lines.append(
+                    f"- {who} is still in a hospital bed at {_place_name(block, place)}"
+                    f" this morning — the discharge is at"
+                    f" {to_datetime(day * SECONDS_PER_DAY + DISCHARGE_HOUR_S):%H:%M} today."
+                )
+                continue
+        rest_until = proc.rest.get(pid, 0)
+        if day < rest_until and day >= (stay[0] if stay is not None else 0):
+            lines.append(
+                f"- {who} is at home hurt, convalescing — not fit to go out or to work"
+                f" until {to_datetime(rest_until * SECONDS_PER_DAY):%A %d %B}."
+            )
+    return lines
+
+
 def _card_lines(
     block: Block, household: Household, people: dict[str, Person], day: int
 ) -> list[str]:
@@ -188,8 +273,13 @@ def build_messages(
     recent: list[str],
     memories: list[str] | None = None,
     witnessed: list[str] | None = None,
+    physical: list[str] | None = None,
 ) -> list[dict]:
     lines = _card_lines(block, household, people, day)
+    if physical:
+        lines.append(PHYSICAL_HEADER)
+        lines.extend(physical)
+        lines.append("")
     if witnessed:
         lines.append("WHAT THEY SAW THEMSELVES (fixed facts — the times below are exact):")
         lines.extend(witnessed)
@@ -223,8 +313,13 @@ def build_reaction_messages(
     now_abs: int,
     memories: list[str] | None = None,
     witnessed: list[str] | None = None,
+    physical: list[str] | None = None,
 ) -> list[dict]:
     lines = _card_lines(block, household, people, day)
+    if physical:
+        lines.append(PHYSICAL_HEADER)
+        lines.extend(physical)
+        lines.append("")
     if witnessed:
         lines.append("WHAT THEY SAW THEMSELVES (fixed facts — the times below are exact):")
         lines.extend(witnessed)

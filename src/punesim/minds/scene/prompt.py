@@ -23,6 +23,8 @@ Output ONLY one JSON object; all fields optional, no extra fields:
                "place_ref": "place id from the card", "activity": "...", "mode": "walk"}]}]}
 Only include day_plan when today should differ from routine (someone stays home, a hospital
 visit, an errand). Use exactly the person ids and place ids given in the card.
+A PHYSICAL STATE block, when present, says where a body already is: write the family visiting,
+phoning or worrying about someone in a hospital bed, never that person at home.
 
 THREE RULES THAT OVERRIDE EVERYTHING ELSE:
 1. PEOPLE ARE FIXED. Every person is given to you as "Name (age, occupation) [id]". Never invent
@@ -39,6 +41,10 @@ THREE RULES THAT OVERRIDE EVERYTHING ELSE:
    Never restate one as if it happened today, never write a memory_write that repeats one, and
    do not run the same small beat again — if a boy lost his notebook yesterday, today is about
    something else. Real households repeat their routines but not their incidents."""
+
+# Stated as fact, not as an instruction: the family knows where its own people
+# are, and a scene that is told so has no reason to invent a boy onto the divan.
+PHYSICAL_HEADER = "PHYSICAL STATE (where these people actually are — you cannot move them):"
 
 REACTION_TASK = """It is {now} — the household has JUST learned of the most recent events above.
 Write their immediate reaction — who calls whom, who rushes where, what they decide right now.

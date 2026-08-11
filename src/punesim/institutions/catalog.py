@@ -10,6 +10,12 @@ from .interpreter import Procedure, Step
 
 FIR_SEVERITY_MIN = 0.4
 
+# The hour a ward bed is given up. Named because the scene lane has to tell a
+# family, on the discharge morning itself, that the patient is still in the
+# ward at 06:30 — a fact it can only state truthfully if it reads the same
+# number this procedure schedules the discharge at.
+DISCHARGE_HOUR_S = 10 * 3600
+
 
 def _hospital_bind(e, ctx) -> dict | None:
     """How long they stay, what it costs, and when they are well again."""
@@ -45,10 +51,10 @@ HOSPITAL_STAY = Procedure(
     bind=_hospital_bind,
     commit=_hospital_commit,
     steps=(
-        Step("d_dis", 10 * 3600, "hospital.discharged",
+        Step("d_dis", DISCHARGE_HOUR_S, "hospital.discharged",
              {"person": "$pid", "place": "$place", "bill": "$bill",
               "household": "$household"}),
-        Step("d_dis", 10 * 3600 + 60, "condition.set",
+        Step("d_dis", DISCHARGE_HOUR_S + 60, "condition.set",
              {"entity_id": "$pid", "kind": "injury", "intensity": "$recovering",
               "stage": "recovering"}),
         Step("heal", 9 * 3600, "condition.set",

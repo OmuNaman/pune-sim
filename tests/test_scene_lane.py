@@ -185,6 +185,61 @@ def test_reaction_scene_same_day_and_next_morning(tmp_path, world):
     assert sum(1 for e in log.events(type="llm.response")) == 5
 
 
+def test_a_prompt_says_where_an_admitted_child_actually_is(tmp_path, world):
+    """The 12,000-household soak's worst contradiction: a 10-year-old lay in a
+    ward from day 5 to day 8 while his household's morning scenes put him on the
+    divan at home — "to aaj ghari visram karat ahe", said his mother — and those
+    scenes' day_plan overrides were committed as real activity.start events, so
+    the log itself said an admitted patient was at home.
+
+    `state.proc.in_hospital` knew the whole time; the prompt was never told, and
+    RECENT EVENTS reaches back only one day, so the admission fell out of view.
+    The fix is not a veto in the compiler — it is telling the actors the fact.
+    Asserted on the PROMPT, which is the thing that was wrong; what a model then
+    writes is its own business.
+    """
+    from punesim.kernel.timebase import to_datetime
+    from punesim.minds.scene import PHYSICAL_HEADER, SYSTEM
+
+    block, hhs, people = world
+    student = _find_student(people, hhs)
+    inj = engine.Injection(
+        day=0, time_s=8 * 3600, type="hazard.road.collision",
+        place=block.places[0].id, participants=(student.id,), severity=0.7,
+    )
+    t = ScriptedTransport([_delta()] * 40)
+    log = EventLog(tmp_path / "ward.db")
+    gw = Gateway(_cfg(tmp_path), Cassette(tmp_path / "c.db"), transport=t, log=log)
+    _n, state = engine.run_simulation(
+        log, SEED, block, hhs, people, days=3, gateway=gw, scenes_k=2, injections=[inj]
+    )
+
+    until, place_id = state.proc.in_hospital[student.id]
+    assert until >= 2, "the stay ended too early to cover a later morning"
+    ward_name = block.get(place_id).name or place_id
+
+    # a morning AFTER the day of the accident — the days the soak got wrong,
+    # when the admission is long gone from RECENT EVENTS
+    told = [p for p in t.prompts if PHYSICAL_HEADER in p and student.id in p]
+    assert told, "no prompt ever told the household where the boy actually was"
+    line = next(
+        ln for ln in told[-1].splitlines()
+        if student.id in ln and "hospital bed" in ln
+    )
+    assert ward_name in line, line
+    assert student.name in line and "Not at home" in line, line
+    # and it is dated, so nobody has to guess how long he is gone
+    assert f"{to_datetime(until * 86400):%A %d %B}" in line, line
+
+    # the header is not emitted for an ordinary morning, and not before the
+    # accident has happened — an empty block in thousands of scenes is noise
+    assert PHYSICAL_HEADER not in t.prompts[0], "a 06:30 day-0 scene predicted an 08:00 crash"
+    assert any(PHYSICAL_HEADER not in p for p in t.prompts), "every household got the block"
+
+    # the system prompt carries the one line that says what to do with it
+    assert "PHYSICAL STATE" in SYSTEM and "never that person at home" in SYSTEM
+
+
 def test_record_then_replay_is_hash_identical(tmp_path, world):
     block, hhs, people = world
     replies = [_delta(), _delta(), _delta(), _delta()]
