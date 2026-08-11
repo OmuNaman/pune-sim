@@ -14,7 +14,7 @@ const SPEEDS = [
 ]
 
 export function TopBar({
-  meta, people, runs, onPickRun, onNewRun,
+  meta, people, runs, onPickRun, onNewRun, onBranch, onTimelines,
 }: {
   meta: RunMeta
   /** From the roster once it exists; meta.people is 0 until then. */
@@ -22,6 +22,8 @@ export function TopBar({
   runs: RunSummary[]
   onPickRun: (id: string) => void
   onNewRun: () => void
+  onBranch: () => void
+  onTimelines: () => void
 }) {
   const [t, setT] = useState(clock.t)
   const [playing, setPlaying] = useState(clock.playing)
@@ -70,6 +72,12 @@ export function TopBar({
         ))}
       </select>
       <StampButton onClick={onNewRun} title="make a new world">+ new</StampButton>
+      <StampButton onClick={onBranch} title="fork this world and change one thing">
+        ⑂
+      </StampButton>
+      <StampButton onClick={onTimelines} title="all the worlds and how they forked">
+        ⎇ timelines
+      </StampButton>
 
       <div className="h-8 w-px bg-[var(--color-line)]" />
 

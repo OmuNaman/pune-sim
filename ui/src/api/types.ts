@@ -38,6 +38,43 @@ export interface NewRunBody {
   autostart?: boolean
 }
 
+export interface BranchBody {
+  name?: string
+  what_if?: string
+  from_day?: number | null
+  add_days?: number
+  injections?: InjectionBody[]
+}
+
+export interface BranchResult {
+  id: string
+  fork_day: number
+  /** How many days the branch must re-simulate before it can differ. */
+  replays_days: number
+  days: number
+  inherited: number
+  added: number
+  live: LiveStatus
+  note: string
+}
+
+export interface DiffReport {
+  identical: boolean
+  a: { id: string; name: string; events: number }
+  b: { id: string; name: string; events: number }
+  branch_point: { day: number; hm: string; what: string } | null
+  first_divergence: { day: number; hm: string; a: string; b: string } | null
+  people_changed: number
+  /** The decoherence curve: how far apart the worlds drift, by day. */
+  by_day_changed: { day: number; n: number }[]
+  reconverged_day: number | null
+  type_deltas: Record<string, number>
+  rumor_deltas: { key: string; reach_a: number; reach_b: number }[]
+  only_in_a: unknown[]
+  only_in_b: unknown[]
+  headline: string[]
+}
+
 export interface InjectionBody {
   day: number
   time: string

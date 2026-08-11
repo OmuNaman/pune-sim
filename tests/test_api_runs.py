@@ -156,6 +156,84 @@ def test_injecting_into_the_past_is_refused_not_silently_dropped(client):
     assert "already been computed" in r.json()["detail"]
 
 
+def test_a_branch_shares_its_parents_past_and_diverges_after(client):
+    """The save-tree, and the reason a diff here means anything.
+
+    A branch is not a copy of the database — it is the same world re-run with
+    one more thing in it. Because the sim is deterministic, replaying the shared
+    days gives byte-identical results, so every difference after the fork was
+    CAUSED by the change. Nothing else could have caused it.
+    """
+    from punesim.api.readlog import ReadOnlyLog
+
+    parent = client.post("/api/runs", json={
+        "name": "trunk", "households": HOUSEHOLDS, "days": DAYS, "seed": SEED,
+        "autostart": True,
+    }).json()["id"]
+    _wait(client, parent, until=lambda s: s.get("status") == "finished")
+
+    block = load_for(HOUSEHOLDS)
+    r = client.post(f"/api/runs/{parent}/branch", json={
+        "name": "what if the well was bad", "what_if": "contaminated well",
+        "from_day": 1,
+        "injections": [{"day": 1, "time": "07:00",
+                        "type": "hazard.water.supply_cut",
+                        "place": block.places[0].id, "severity": 0.8}],
+    }).json()
+    kid = r["id"]
+    assert r["fork_day"] == 1 and r["replays_days"] == 1
+    _wait(client, kid, until=lambda s: s.get("status") == "finished")
+
+    # Lineage is recorded, so the tree can be drawn.
+    detail = client.get(f"/api/runs/{kid}").json()
+    assert detail["parent_id"] == parent and detail["parent_day"] == 1
+    assert kid in client.get(f"/api/runs/{parent}").json()["children"]
+
+    # Day 0 is the SAME day in both worlds, event for event.
+    def day0(rid):
+        log = ReadOnlyLog(client.app.state.registry.get(rid).db)
+        return [(e.sim_time, e.type, e.payload)
+                for e in log.events(until_time=86_400)
+                if e.type != "run.meta"]
+
+    assert day0(parent) == day0(kid), (
+        "the shared past is not shared, so nothing after the fork can be "
+        "attributed to the change"
+    )
+
+    # ...and the what-if actually happened in the branch, only.
+    kid_log = ReadOnlyLog(client.app.state.registry.get(kid).db)
+    par_log = ReadOnlyLog(client.app.state.registry.get(parent).db)
+    assert [e for e in kid_log.events(type="hazard.water.supply_cut")]
+    assert not [e for e in par_log.events(type="hazard.water.supply_cut")]
+
+
+def test_the_differ_says_what_the_change_did(client):
+    """`1,138 people had a different day` is the number this project exists to
+    produce. A save file in a game cannot tell you that."""
+    parent = client.post("/api/runs", json={
+        "name": "a", "households": HOUSEHOLDS, "days": DAYS, "seed": SEED,
+        "autostart": True,
+    }).json()["id"]
+    _wait(client, parent, until=lambda s: s.get("status") == "finished")
+
+    block = load_for(HOUSEHOLDS)
+    kid = client.post(f"/api/runs/{parent}/branch", json={
+        "from_day": 1,
+        "injections": [{"day": 1, "time": "08:00", "type": "hazard.road.collision",
+                        "place": block.places[0].id, "severity": 0.9}],
+    }).json()["id"]
+    _wait(client, kid, until=lambda s: s.get("status") == "finished")
+
+    d = client.post("/api/diff", json={"a": parent, "b": kid}).json()
+    assert not d["identical"], "an injected collision changed nothing at all"
+    assert d["first_divergence"] and d["first_divergence"]["day"] >= 1, (
+        "the worlds differ before the fork day, which means the past is not shared"
+    )
+    assert d["headline"], "the differ produced no summary"
+    assert any(v > 0 for v in d["type_deltas"].values())
+
+
 def test_an_adopted_run_can_be_read_but_not_driven(client, tmp_path):
     """A run this UI did not create has no checkpoint and no recorded horizon;
     play would have to invent both."""

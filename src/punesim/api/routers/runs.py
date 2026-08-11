@@ -224,6 +224,103 @@ def inject(request: Request, run_id: str, body: InjectBody):
     return {"queued": True, "live": True, "day": body.day}
 
 
+class BranchBody(BaseModel):
+    name: str = ""
+    what_if: str = ""
+    """Where the two worlds part. Days before this are replayed identically."""
+    from_day: int | None = None
+    add_days: int = Field(0, ge=0, le=365)
+    injections: list[InjectBody] = []
+
+
+@router.post("/{run_id}/branch")
+def branch(request: Request, run_id: str, body: BranchBody):
+    """Fork a world at a day and change one thing.
+
+    A branch is not a copy of the database — it is the SAME world re-run with
+    one more injection in it. That is what makes the diff meaningful: the sim is
+    deterministic, so replaying days 0..N gives byte-identical results, and
+    every difference after the fork is caused by the thing you changed. Nothing
+    else could have caused it.
+
+    The cost is that the shared past is re-simulated: branching at day 12 of a
+    30-day V3 run recomputes twelve days. The response says how many, so the UI
+    can warn before the user commits to it.
+
+    Two carve-outs the UI must not hide:
+      - interviews (`conversation.held`) are user-provenance but deliberately
+        NOT reconstructed (branch.py:18), so a branch will not replay a
+        conversation you had with somebody in the parent.
+      - the horizon cannot be extended in place (checkpoint.py:105), which is
+        precisely why "play past the end" sends you here with add_days.
+    """
+    from ...branch import reconstruct_injections
+    from ..readlog import ReadOnlyLog
+
+    reg = request.app.state.registry
+    src = reg.get(run_id)
+    if src is None:
+        raise HTTPException(404, f"no run {run_id!r}")
+    log = ReadOnlyLog(src.db)
+    if not log.exists():
+        raise HTTPException(409, "this run has no log to branch from")
+
+    meta = request.app.state.worlds.meta_only(run_id, src.db)
+    seed = meta.get("seed", src.params.seed)
+    block = meta.get("block", "kasba")
+    households = meta.get("households", src.params.households)
+    n_events, max_t, _seq = log.summary()
+    days_done = (max_t // SECONDS_PER_DAY + 1) if n_events else 0
+
+    fork_day = body.from_day if body.from_day is not None else days_done
+    if fork_day < 0 or fork_day > days_done:
+        raise HTTPException(
+            400, f"cannot branch at day {fork_day}: this run has {days_done} days")
+
+    # Everything the parent was told to do, plus the what-if. Injections after
+    # the fork day are dropped — that is what forking THERE means.
+    inherited = [
+        {"day": i.day,
+         "time": f"{i.time_s // 3600:02d}:{i.time_s % 3600 // 60:02d}",
+         "type": i.type, "place": i.place, "participants": list(i.participants),
+         "severity": i.severity, "payload": i.payload}
+        for i in reconstruct_injections(log) if i.day < fork_day
+    ]
+    extra = [b.model_dump() for b in body.injections]
+    for e in extra:
+        if e["day"] < fork_day:
+            raise HTTPException(
+                400, f"an injection on day {e['day']} is before the fork at day "
+                     f"{fork_day} — it would be part of the shared past, not the "
+                     f"what-if")
+
+    days = max(days_done, fork_day) + body.add_days
+    rec = reg.create(
+        body.name or f"{src.name} · what if",
+        RunParams(seed=seed, block=block, households=households, days=days,
+                  hazards=src.params.hazards, scenes=src.params.scenes,
+                  k=src.params.k, follow=list(src.params.follow)),
+        parent_id=run_id, parent_day=fork_day,
+        what_if=body.what_if or (extra[0]["type"] if extra else "same again"),
+    )
+    rec.pending_injections = [*inherited, *extra]
+    reg.save(rec)
+    live = request.app.state.manager.start(params_from(rec, start_paused=False))
+    return {
+        "id": rec.id,
+        "fork_day": fork_day,
+        "replays_days": fork_day,
+        "days": days,
+        "inherited": len(inherited),
+        "added": len(extra),
+        "live": live,
+        # Said plainly, because the UI shows it before the user commits.
+        "note": (f"days 0–{fork_day - 1} are re-simulated identically; "
+                 f"everything after is the consequence of the change"
+                 if fork_day else "branched from the very beginning"),
+    }
+
+
 @router.get("/{run_id}/events")
 def worker_events(request: Request, run_id: str, since: int = 0):
     """What the worker has said since message `since`.

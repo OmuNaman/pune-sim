@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, ORJSONResponse
 
 from .manager import RunManager
 from .registry import RunRegistry
-from .routers import feed, runs, world
+from .routers import diff, feed, runs, world
 from .worldcache import WorldCache
 
 # The built frontend, if it has been built. Kept out of the package so `ui/` can
@@ -44,6 +44,7 @@ def create_app(runs_root: str = "runs", cfg=None, dev: bool = False) -> FastAPI:
     app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
     app.include_router(world.router, prefix="/api/runs", tags=["world"])
     app.include_router(feed.router, prefix="/api/runs", tags=["feed"])
+    app.include_router(diff.router, prefix="/api", tags=["diff"])
 
     @app.get("/api/health")
     def health():

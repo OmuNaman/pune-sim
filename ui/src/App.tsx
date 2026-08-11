@@ -5,6 +5,7 @@ import { api } from './api/client'
 import type { RunMeta } from './api/types'
 import { clock, DAY_S } from './clock/engine'
 import { setEpoch } from './lib/time'
+import { runSecondsPerDay } from './lib/cost'
 import { MapRoot } from './map/MapRoot'
 import { TopBar } from './panels/TopBar'
 import { TimelineStrip } from './panels/TimelineStrip'
@@ -12,6 +13,8 @@ import { LeftRail } from './panels/LeftRail'
 import { Inspector } from './panels/Inspector'
 import { RunControl } from './features/RunControl'
 import { NewRun } from './features/NewRun'
+import { BranchHere } from './features/BranchHere'
+import { Timelines } from './features/Timelines'
 import { Panel } from './components/Panel'
 import { Logo } from './components/Logo'
 
@@ -19,6 +22,8 @@ export default function App() {
   const [runId, setRunId] = useState<string | null>(null)
   const [t, setT] = useState(0)
   const [newRun, setNewRun] = useState(false)
+  const [branching, setBranching] = useState(false)
+  const [timelines, setTimelines] = useState(false)
 
   const runs = useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
@@ -120,7 +125,9 @@ export default function App() {
     <div className="relative w-full h-full">
       <MapRoot meta={m} />
       <TopBar meta={m} people={people} runs={runs.data.runs.filter((r) => r.days_done > 0)}
-              onPickRun={setRunId} onNewRun={() => setNewRun(true)} />
+              onPickRun={setRunId} onNewRun={() => setNewRun(true)}
+              onBranch={() => setBranching(true)}
+              onTimelines={() => setTimelines(true)} />
       <LeftRail runId={m.id} t={t} />
       <Inspector runId={m.id} t={t} order={roster.data?.order} />
       <RunControl meta={m} />
@@ -129,6 +136,16 @@ export default function App() {
       {newRun && (
         <NewRun onClose={() => setNewRun(false)}
                 onCreated={(id) => { void runs.refetch(); setRunId(id) }} />
+      )}
+      {branching && (
+        <BranchHere meta={m} day={Math.floor(t / DAY_S)}
+                    secondsPerDay={runSecondsPerDay(m)}
+                    onClose={() => setBranching(false)}
+                    onBranched={(id) => { void runs.refetch(); setRunId(id) }} />
+      )}
+      {timelines && (
+        <Timelines current={m.id} onClose={() => setTimelines(false)}
+                   onOpen={(id) => { setRunId(id); setTimelines(false) }} />
       )}
     </div>
   )

@@ -2,34 +2,16 @@ import { useState } from 'react'
 import { api } from '../api/client'
 import { Panel, StampButton } from '../components/Panel'
 import { duration } from '../lib/time'
+import { beyondMeasured, modelSpend, secondsPerDay, PEOPLE_PER_HOUSEHOLD } from '../lib/cost'
 
 /**
  * Making a world.
  *
  * The numbers under the sliders are the point. A run is a real cost in time and
- * (with scenes on) in money, and both scale hard with the household count —
+ * (with scenes on) in money, and time scales hard with the household count —
  * 0.04 seconds a day at 80 households, 62-86 at 12,000. A dialog that hides
  * that lets you ask for two and a half hours of compute by dragging a slider.
  */
-
-// Measured, from docs/perf/scale-probe.md and the V3 soak: seconds per sim-day.
-// Interpolated between rungs; kasba's tiny world is faster per person than the
-// routed oldcity one, which is why they are separate.
-const RUNGS: Record<string, [number, number][]> = {
-  kasba: [[306, 0.042], [1266, 0.314], [5000, 3.23], [11240, 14.58]],
-  oldcity: [[12438, 22.2], [24716, 35.7], [49578, 86.1]],
-}
-
-function secondsPerDay(block: string, people: number): number {
-  const rungs = RUNGS[block] ?? RUNGS.kasba
-  if (people <= rungs[0][0]) return rungs[0][1] * (people / rungs[0][0])
-  for (let i = 1; i < rungs.length; i++) {
-    const [p0, s0] = rungs[i - 1], [p1, s1] = rungs[i]
-    if (people <= p1) return s0 + ((people - p0) / (p1 - p0)) * (s1 - s0)
-  }
-  const [pl, sl] = rungs[rungs.length - 1]
-  return sl * (people / pl) ** 1.2   // beyond the measured range, and says so
-}
 
 export function NewRun({ onClose, onCreated }: {
   onClose: () => void
@@ -45,13 +27,10 @@ export function NewRun({ onClose, onCreated }: {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  // ~4.13 people per household, from the fitted demography.
-  const people = Math.round(households * 4.13)
+  const people = Math.round(households * PEOPLE_PER_HOUSEHOLD)
   const perDay = secondsPerDay(block, people)
-  const beyond = people > (RUNGS[block].at(-1)?.[0] ?? 0)
-  // $0.0031/sim-day measured at 12,000 households with the spotlight gate at
-  // k=5 — spend follows attention, not population, which is why it barely moves.
-  const spend = scenes ? days * 0.0031 * (k / 5) : 0
+  const beyond = beyondMeasured(block, people)
+  const spend = scenes ? modelSpend(days, k) : 0
 
   const go = () => {
     setBusy(true); setErr('')
