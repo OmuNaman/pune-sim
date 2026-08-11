@@ -443,10 +443,28 @@ figures assume one solo dev at ~15–25 focused hrs/wk.
   [exits/v3-exit-result.md](exits/v3-exit-result.md), which states precisely
   what the closure does and does not establish.
 
+  **Hazard rates are per-capita since 2026-08-11**, and the source this document
+  named for them was the wrong one. Rates are now incidents per 1,000 people per
+  year, drawn as a Poisson count against the population — which is what
+  [04-events §HazardSampler](subsystems/04-events.md) specified all along — so
+  the same trouble no longer falls on 306 people and on 49,578 alike (298 per
+  1,000 per year against 1.84). One of the four classes is measured:
+  `hazard.road.collision` at 0.394 per 1,000 per year, from MoRTH's *Road
+  Accidents in India 2023* large-cities table (Pune: 1,230 accidents) over PMC's
+  Census-2011 population, both vendored, re-derivable by
+  `scripts/hazard_rates.py`. **NCRB cannot supply this number**: its ADSI 2024
+  city table gives Pune 373 cases and 381 deaths — a fatal-accident register, not
+  an incidence count — and its fire table is state-level and fatal-only. The
+  other three classes keep `provenance: estimate@49578`, the old absolute level
+  held at the V3 population, and say so in the file. Still open on level, not
+  shape: MoRTH counts *reported* accidents, so 0.394 is a floor for a class the
+  sim defines as any street incident three people notice; and per-capita on
+  residents under-counts four peths that carry a much larger catchment's
+  through-traffic.
+
   **Open, and carried into V4:** `nuclear_nokids` sits at 0.04 because nothing in
   three marginals distinguishes a childless couple from an empty nest; a fourth
-  (literacy or the age bands) would pin it. Hazard rates are absolute rather than
-  per-capita and blocked on NCRB data nobody has vendored. Blame can name a
+  (literacy or the age bands) would pin it. Blame can name a
   building or a mapped org but not an arbitrary organisation, because places
   carry `kind` and claims carry `topics` and nothing joins those vocabularies.
   GTFS, jurisdictions and the calendar are vendored but not wired;

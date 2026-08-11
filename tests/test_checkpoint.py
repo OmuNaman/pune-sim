@@ -85,7 +85,13 @@ def _killed_and_resumed(tmp_path, world):
     return h, next_day, dropped
 
 
-def test_a_resumed_run_is_byte_identical_to_one_that_never_stopped(tmp_path, world):
+def test_a_resumed_run_is_byte_identical_to_one_that_never_stopped(
+    tmp_path, world, hazard_density
+):
+    # Without this the run is pure clockwork at this size and the test proves
+    # only that the schedule replays; the interesting thing to carry across a
+    # checkpoint is a hazard and the institutional reactions it sets off.
+    hazard_density(world[2])
     whole = _uninterrupted(tmp_path / "a", world)
     resumed, next_day, _dropped = _killed_and_resumed(tmp_path / "b", world)
     assert next_day == KILL_AFTER + 1

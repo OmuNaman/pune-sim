@@ -1,8 +1,10 @@
 """V1 thin hazards: un-injected trouble, sampled by keyed draws (04-events).
 
-The world produces its own ripples: a keyed Bernoulli per hazard class per day
-decides whether something happens, where, when, and to whom — no scenario
-code, no LLM. Each realized hazard reuses the same stub-institution machinery
+The world produces its own ripples: a keyed Poisson draw per hazard class per
+day decides how much happens, where, when, and to whom — no scenario code, no
+LLM. Its mean is the class's per-capita rate held against the population, so
+trouble grows with the city instead of being a fixed quota shared out among
+however many people happen to live there. Each realized hazard reuses the same stub-institution machinery
 as user injections, and seeds percepts in tiers (witness / nearby / word of
 mouth) so the block *hears about it* through the INFO lane rather than by
 narrator fiat.
@@ -95,40 +97,46 @@ def sample_day(
     homes cannot tell them apart. A venue with nobody to perceive it is not a
     hazard, it is a tree falling in no forest — the soak's day-9 water cut hit
     a school whose 320 m catchment held one home with nobody in it, and
-    produced zero percepts and zero conversation."""
+    produced zero percepts and zero conversation.
+
+    How MANY of a class happen is a Poisson count against the population, not a
+    coin flip: rates are per-capita (`ClassDef.expected_per_day`), and a
+    Bernoulli caps the world at one collision a day however large it grows — a
+    ceiling real Pune passes at about 927,000 people, well inside the 3.5M path.
+    """
     out: list[Hazard] = []
     named = sorted((p for p in block.places if p.name), key=lambda p: p.id)
     if not named:
         return out
+    population = len(people)
     for cd in CLASSES:
-        cls, rate, (w0, w1) = cd.type, cd.p_per_day, cd.window
+        cls, (w0, w1) = cd.type, cd.window
         shape, predicate, topics, charge = cd.shape, cd.predicate, cd.topics, cd.charge
         rng = keyed_rng(run_seed, "hazard", cls, day, "realize")
-        if rng.random() >= rate:
-            continue
-        t_abs = day * SECONDS_PER_DAY + w0 + int(rng.integers(0, max(1, (w1 - w0) // 60))) * 60
-        sizes = _audience_sizes(t_abs, shape, block, people, intervals)
-        live = [p for p in named if sizes.get(p.id, 0) >= MIN_AUDIENCE]
-        if not live:
-            continue  # nobody would perceive it; do not fabricate a hazard
-        place = live[int(rng.integers(0, len(live)))]
-        severity = 0.25 + rng.random() * 0.5
-        participants: tuple[str, ...] = ()
-        if shape == "point" and cls == "hazard.road.collision":
-            present = [
-                pid for pid in sorted(intervals)
-                if people[pid].age >= 6 and any(
-                    pl == place.id and t0 - 900 <= t_abs <= t1 + 900
-                    for pl, t0, t1 in intervals[pid]
-                )
-            ]
-            if present:
-                n = min(len(present), 1 + int(rng.integers(0, 2)))
-                participants = tuple(present[:n])
-        out.append(
-            Hazard(cls, day, t_abs, place.id, shape, predicate, topics, charge,
-                   round(severity, 2), participants)
-        )
+        for _ in range(int(rng.poisson(cd.expected_per_day(population)))):
+            t_abs = day * SECONDS_PER_DAY + w0 + int(rng.integers(0, max(1, (w1 - w0) // 60))) * 60
+            sizes = _audience_sizes(t_abs, shape, block, people, intervals)
+            live = [p for p in named if sizes.get(p.id, 0) >= MIN_AUDIENCE]
+            if not live:
+                continue  # nobody would perceive it; do not fabricate a hazard
+            place = live[int(rng.integers(0, len(live)))]
+            severity = 0.25 + rng.random() * 0.5
+            participants: tuple[str, ...] = ()
+            if shape == "point" and cls == "hazard.road.collision":
+                present = [
+                    pid for pid in sorted(intervals)
+                    if people[pid].age >= 6 and any(
+                        pl == place.id and t0 - 900 <= t_abs <= t1 + 900
+                        for pl, t0, t1 in intervals[pid]
+                    )
+                ]
+                if present:
+                    n = min(len(present), 1 + int(rng.integers(0, 2)))
+                    participants = tuple(present[:n])
+            out.append(
+                Hazard(cls, day, t_abs, place.id, shape, predicate, topics, charge,
+                       round(severity, 2), participants)
+            )
     return out
 
 

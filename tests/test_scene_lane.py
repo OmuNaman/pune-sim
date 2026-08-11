@@ -292,7 +292,7 @@ def test_a_scene_is_never_shown_its_own_previous_output(tmp_path, world):
     assert "EARLIER MORNINGS" in day2
 
 
-def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world):
+def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world, hazard_density):
     """The raw-dict fallback was the leak's delivery mechanism; an unknown type
     must now render nothing rather than a Python dict."""
     import re
@@ -300,6 +300,7 @@ def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world):
     from punesim.minds.scene import _humanize
 
     block, hhs, people = world
+    hazard_density(people)  # there must be events to render before this can leak
     assert _humanize("some.future.type", {"person": "person:000.0"}, block, people) == ""
     log = EventLog(tmp_path / "raw.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=4, hazards=True)
@@ -310,13 +311,17 @@ def test_no_prompt_line_ever_dumps_a_raw_payload(tmp_path, world):
         assert not [ln for ln in lines if re.search(r": \{.*\}$", ln)], lines
 
 
-def test_every_id_in_a_prompt_arrives_with_a_name(tmp_path, world):
+def test_every_id_in_a_prompt_arrives_with_a_name(tmp_path, world, hazard_density):
     """A bare person id is an invitation to invent one: the soak's model met
     `person:022.4` and produced "Shobha tai", an adult colleague, for a
     six-year-old pupil — then kept her for four days."""
     import re
 
     block, hhs, people = world
+    # The ids in a prompt line are hazard participants. Rates are per-capita, so
+    # at 25 households nothing happens in five days and `seen` was 0 — the test
+    # passed its real assertion by never reaching it.
+    hazard_density(people)
     log = EventLog(tmp_path / "ids.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=5, hazards=True)
     seen = 0

@@ -26,7 +26,8 @@ def test_the_shipped_registry_loads_and_is_ordered():
         "hazard.power.outage", "hazard.fire.small",
     ], "order fixes the sequence of keyed draws in sample_day, and so the hash"
     for c in defs:
-        assert 0 < c.p_per_day < 1
+        assert c.rate_per_1k_per_year > 0
+        assert 0 < c.expected_per_day(classdefs.REFERENCE_POPULATION) < 1
         assert c.window[0] < c.window[1]
         assert c.narratability in classdefs.NARRATABILITY
         assert c.topics, f"{c.type} belongs to no topic, so no belief can act on it"
@@ -37,7 +38,7 @@ def test_a_bad_class_is_refused_at_load(tmp_path):
     for bad, field in (({"shape": "everywhere"}, "shape"),
                        ({"narratability": "cinematic"}, "narratability")):
         spec = {
-            "type": "hazard.test", "p_per_day": 0.1, "window": ["08:00", "09:00"],
+            "type": "hazard.test", "rate_per_1k_per_year": 0.1, "window": ["08:00", "09:00"],
             "shape": "point", "predicate": "test", "topics": ["safety"], "charge": 0.5,
         }
         spec.update(bad)
@@ -50,7 +51,7 @@ def test_a_bad_class_is_refused_at_load(tmp_path):
 def _run_with(monkeypatch, narratability: str, tmp_path) -> list:
     """Inject one event of a test class and return the claims it seeded."""
     cd = classdefs.ClassDef(
-        type="hazard.test.thing", p_per_day=0.0, window=(9 * 3600, 10 * 3600),
+        type="hazard.test.thing", rate_per_1k_per_year=0.0, window=(9 * 3600, 10 * 3600),
         shape="area", predicate="dangerous", topics=("safety",), charge=0.9,
         narratability=narratability,
     )
@@ -89,7 +90,7 @@ def test_a_numeric_class_is_counted_but_never_narrated(monkeypatch, tmp_path):
 def test_the_event_itself_is_still_committed(monkeypatch, tmp_path):
     """Not narratable is not the same as not happening — it must still count."""
     cd = classdefs.ClassDef(
-        type="hazard.test.thing", p_per_day=0.0, window=(9 * 3600, 10 * 3600),
+        type="hazard.test.thing", rate_per_1k_per_year=0.0, window=(9 * 3600, 10 * 3600),
         shape="area", predicate="dangerous", topics=("safety",), charge=0.9,
         narratability="numeric",
     )

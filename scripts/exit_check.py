@@ -240,7 +240,7 @@ def v1a_rumour_lives(log: Log, claim_key: str, seeds: set[str]) -> Clause:
     return c.say("PASS" if ok else "FAIL", *lines)
 
 
-def v1b_random_hazard_ripples(log: Log) -> Clause:
+def v1b_random_hazard_ripples(log: Log, population: int = 0) -> Clause:
     c = Clause("V1-b", "a random hazard produces an un-injected ripple")
     lines, any_ok = [], False
     for seq, t, ty, _p, _cause, prov in log.rows("AND type LIKE 'hazard.%'"):
@@ -249,7 +249,26 @@ def v1b_random_hazard_ripples(log: Log) -> Clause:
         if prov == "clockwork" and n > 0:
             any_ok = True
     if not lines:
-        return c.say("FAIL", "no hazards at all in this run")
+        # Rates are per-capita, so an empty log can mean the machinery is broken
+        # OR that this world was too small and too short for anything to be
+        # likely — and those are different answers. Silence in a world that
+        # expected 0.1 hazards is not evidence of anything.
+        from punesim.world import classdefs
+
+        defs = classdefs.load()
+        days = (max((t for _s, t, *_ in log.rows()), default=0) // DAY) + 1
+        expected = sum(cd.expected_per_day(population) for cd in defs) * days
+        if expected < 3.0:
+            per_1k = sum(cd.rate_per_1k_per_year for cd in defs)
+            need = 3.0 * 365.0 * 1000.0 / (per_1k * days)
+            return c.say(
+                "SKIP",
+                f"no hazards, and none were likely: {population:,} people over "
+                f"{days} day(s) expects {expected:.2f}. Judging this needs a world "
+                f"where a few are — about {need:,.0f} people for {days} day(s), or "
+                f"the same people for {need / max(1, population) * days:,.0f} days",
+            )
+        return c.say("FAIL", f"no hazards in a run that expected {expected:.1f}")
     return c.say(
         "PASS" if any_ok else "FAIL", *lines,
         "'believable' is a judgement, not a predicate — this only shows the ripple exists",
@@ -337,7 +356,7 @@ def main() -> int:
         v0a_consequences_on_schedule(log),
         v0b_scenes_reference_it(log, args.household),
         v0c_gossip_reaches_neighbours(log, args.household, hh_of),
-        v1b_random_hazard_ripples(log),
+        v1b_random_hazard_ripples(log, len(people)),
         v1d_cost(log),
         v2a_the_chain(log, args.household, hh_of),
         v1a_rumour_lives(log, args.claim, set(args.seeds.split(","))),

@@ -58,7 +58,9 @@ Old City core: Kasba Peth + Shaniwar Peth + Budhwar Peth + Raviwar Peth
 | Police structure: 5 zones, 30 stations, 104+ chowkies | [Pune Police](https://en.wikipedia.org/wiki/Pune_Police), punepolice.gov.in crime review |
 | Courts | Pune District & Sessions Court (Shivajinagar) via e-Courts / NJDG pendency data (dashboards, no bulk API) |
 | Politics | PMC: **41 prabhags, ~165 corporators; the Jan 2026 PMC election already happened** — sim treats it as a counterfactual-replay test |
-| Crime/accident base rates | NCRB city tables (total rioting only; communal split is state-level → Maharashtra rates × exposure share), Pune Police crime review |
+| Road-accident base rate | **MoRTH, Road Accidents in India 2023**, large-cities table — Pune 1,230 accidents over PMC's 3,124,458, so 0.394 per 1,000 people per year (vendored; `scripts/hazard_rates.py` re-derives it). NCRB's own city table counts fatal accidents only — 373 cases against 381 deaths — so it cannot set an incidence rate |
+| Other hazard base rates | Uncalibrated, and labelled `estimate` in `data/classdefs/hazards.json`. Fire needs Pune Fire Brigade call statistics (NCRB's fire table is state-level and fatal-only); power needs MERC/MSEDCL SAIFI-SAIDI; water cuts have no published rate |
+| Crime base rates | NCRB city tables (total rioting only; communal split is state-level → Maharashtra rates × exposure share), Pune Police crime review |
 | Collective-event calibration | 2014 Hadapsar (Mohsin Shaikh), 2018 Bhima Koregaon violence + bandh; 1894 Pune / 2009 Miraj as festival-trigger templates — see [09-collective-dynamics](docs/subsystems/09-collective-dynamics.md) |
 | History | 18 peths (1713–1818), Kasba Peth (5th c.), Shaniwar Wada (1730), 450+ heritage wadas |
 

@@ -4,61 +4,78 @@
     "Adding one needs no Python. Order is load-bearing: it fixes the sequence of keyed",
     "draws in hazards.sample_day, and so the determinism hash.",
     "",
-    "p_per_day is ABSOLUTE, not per-capita — the same 0.25 hazards a day whether the",
-    "world holds 306 people or 49,578. Held against population that is 298 per 1,000",
-    "per year at 306 and 1.84 at 49,578, so the values below are tuned for narrative",
-    "density in a small world and are NOT calibrated to Pune. The architecture names",
-    "NCRB city tables as the source; none is vendored yet. See docs/soaks/v3-scale-soak.md.",
+    "Rates are PER-CAPITA: incidents per 1,000 people per year. The day's count for a",
+    "class is a Poisson draw with mean rate/1000 * population / 365, so a world twice",
+    "the size has twice the trouble. Until 2026-08-11 this file carried an absolute",
+    "p_per_day instead, which meant the same 0.25 hazards a day whether the block held",
+    "306 people or 49,578 — 298 per 1,000 per year against 1.84.",
+    "",
+    "provenance says where a number came from, and only one of these is measured:",
+    "  morth-2023:pune — 1,230 road accidents in Pune in 2023 (MoRTH, Road Accidents in",
+    "    India 2023, large-cities table) over PMC's Census-2011 population 3,124,458.",
+    "    Both anchors are vendored; scripts/hazard_rates.py re-derives the number from",
+    "    them and tests/test_hazard_rates.py fails if this file drifts from the source.",
+    "    NOTE the architecture named NCRB city tables for this and NCRB cannot do it:",
+    "    ADSI 2024 Table 1A.2 gives Pune 373 cases, 18 injured and 381 dead — deaths",
+    "    exceed cases, because it is a fatal-accident register, not an incidence count.",
+    "    It also counts only what police recorded, so 0.394 is a floor for a class the",
+    "    sim defines as any street incident three people notice.",
+    "  estimate@49578 — no source. The old absolute setting, held at the V3 four-peth",
+    "    population so the largest world we have actually run keeps the density it was",
+    "    soaked at, and everything else scales off that. Fire needs Pune Fire Brigade",
+    "    call statistics (NCRB Table 1.12 is state-level and fatal-only); power needs",
+    "    MERC/MSEDCL SAIFI-SAIDI; water needs PMC, which publishes shutdown notices and",
+    "    no rate at all.",
     "",
     "narratability (08-identity §5): full = a scene may open on it; abstract = it may be",
     "referred to but not staged; numeric = it happens and is counted, and no scene ever",
-    "opens on it regardless of attention. NCRB calibration will generate classes that",
-    "must be numeric."
+    "opens on it regardless of attention. Calibration will generate classes that must",
+    "be numeric."
   ],
   "classes": [
     {
       "type": "hazard.road.collision",
-      "p_per_day": 0.10,
+      "rate_per_1k_per_year": 0.393668,
       "window": ["08:00", "20:00"],
       "shape": "point",
       "predicate": "collision",
       "topics": ["safety"],
       "charge": 0.85,
       "narratability": "full",
-      "provenance": "estimate"
+      "provenance": "morth-2023:pune"
     },
     {
       "type": "hazard.water.supply_cut",
-      "p_per_day": 0.06,
+      "rate_per_1k_per_year": 0.441728,
       "window": ["06:00", "09:00"],
       "shape": "area",
       "predicate": "supply_cut",
       "topics": ["water"],
       "charge": 0.6,
       "narratability": "full",
-      "provenance": "estimate"
+      "provenance": "estimate@49578"
     },
     {
       "type": "hazard.power.outage",
-      "p_per_day": 0.07,
+      "rate_per_1k_per_year": 0.515350,
       "window": ["10:00", "22:00"],
       "shape": "area",
       "predicate": "outage",
       "topics": ["power"],
       "charge": 0.35,
       "narratability": "full",
-      "provenance": "estimate"
+      "provenance": "estimate@49578"
     },
     {
       "type": "hazard.fire.small",
-      "p_per_day": 0.02,
+      "rate_per_1k_per_year": 0.147243,
       "window": ["09:00", "23:00"],
       "shape": "point",
       "predicate": "fire",
       "topics": ["safety"],
       "charge": 0.9,
       "narratability": "full",
-      "provenance": "estimate"
+      "provenance": "estimate@49578"
     }
   ]
 }

@@ -141,10 +141,11 @@ def test_rumor_run_is_deterministic(tmp_path, world):
     assert hashes[0] == hashes[1]
 
 
-def test_random_hazards_ripple_without_injection(tmp_path, world):
+def test_random_hazards_ripple_without_injection(tmp_path, world, hazard_density):
     """V1 exit: an UN-injected hazard produces a believable ripple — sirens,
     percepts, gossip — from keyed draws alone, twice-run hash-identical."""
     block, hhs, people = world
+    hazard_density(people)  # per-capita rates; 100 people are quiet, see conftest
     hashes, logs = [], []
     for name in ("h1.db", "h2.db"):
         log = EventLog(tmp_path / name)
@@ -250,10 +251,11 @@ def test_lineage_accumulates_and_keeps_the_recent_tail():
     assert kept[-1] == long_chain[-1], "truncating the tail would disable echo detection"
 
 
-def test_your_own_story_does_not_come_back_to_convince_you(tmp_path, world):
+def test_your_own_story_does_not_come_back_to_convince_you(tmp_path, world, hazard_density):
     """A->B->A: before this guard 12% of all hearings were echoes, and they
     were the fastest route to false certainty about your own exaggeration."""
     block, hhs, people = world
+    hazard_density(people)  # something has to happen for anyone to retell it
     log = EventLog(tmp_path / "echo.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=6, hazards=True)
     echoes = [
@@ -263,11 +265,12 @@ def test_your_own_story_does_not_come_back_to_convince_you(tmp_path, world):
     assert not echoes, f"{len(echoes)} hearings came back to their own teller"
 
 
-def test_a_hazard_always_lands_where_someone_can_perceive_it(tmp_path, world):
+def test_a_hazard_always_lands_where_someone_can_perceive_it(tmp_path, world, hazard_density):
     """The soak's day-9 water cut hit a school whose catchment held one home
     with nobody in it: zero percepts, zero conversation, a non-event that still
     consumed a hazard draw."""
     block, hhs, people = world
+    hazard_density(people)
     log = EventLog(tmp_path / "haz.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=30, hazards=True)
     hazards = [e for e in log.events() if e.type.startswith("hazard.")]
@@ -277,10 +280,11 @@ def test_a_hazard_always_lands_where_someone_can_perceive_it(tmp_path, world):
         assert percepts, f"{h.type} at day {h.sim_time // 86400} was perceived by nobody"
 
 
-def test_only_a_casualty_gets_an_ambulance(tmp_path, world):
+def test_only_a_casualty_gets_an_ambulance(tmp_path, world, hazard_density):
     """Reactions keyed on the presence of a place, not the kind of trouble —
     so the soak dispatched an ambulance to a water cut and to a power cut."""
     block, hhs, people = world
+    hazard_density(people)
     log = EventLog(tmp_path / "amb.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=30, hazards=True)
     by_seq = {e.seq: e for e in log.events()}
@@ -461,9 +465,10 @@ def test_nobody_is_available_to_talk_in_their_sleep():
     assert info.WAKE_S[1] <= 7 * 3600
 
 
-def test_the_block_stops_gossiping_at_night(tmp_path, world):
+def test_the_block_stops_gossiping_at_night(tmp_path, world, hazard_density):
     """The same thing end to end: no hop of any real run lands in the dark."""
     block, hhs, people = world
+    hazard_density(people)
     log = EventLog(tmp_path / "night.db")
     engine.run_simulation(log, SEED, block, hhs, people, days=6, hazards=True)
     small_hours = [

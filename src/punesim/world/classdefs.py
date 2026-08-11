@@ -20,12 +20,20 @@ import orjson
 DEFAULT_PATH = "data/classdefs/hazards.json"
 NARRATABILITY = ("full", "abstract", "numeric")
 SHAPES = ("point", "area")
+DAYS_PER_YEAR = 365.0
+
+# The population the estimate-only rates are anchored at: the V3 four-peth block
+# at 12,000 households. Those classes have no city table behind them, so their
+# level is the old absolute setting held at the largest world we have actually
+# run — not a measurement, and `provenance` says so. Only the reference matters
+# for them; the shape is per-capita for every class alike.
+REFERENCE_POPULATION = 49_578
 
 
 @dataclass(frozen=True)
 class ClassDef:
     type: str
-    p_per_day: float
+    rate_per_1k_per_year: float
     window: tuple[int, int]  # seconds into the day
     shape: str
     predicate: str
@@ -33,6 +41,15 @@ class ClassDef:
     charge: float
     narratability: str = "full"
     provenance: str = "estimate"
+
+    def expected_per_day(self, population: int) -> float:
+        """Poisson mean for one day in a world of `population` people.
+
+        This is the whole of the per-capita fix: a rate is a property of a
+        population, so a world twice the size has twice the trouble. It used to
+        be an absolute `p_per_day`, which made the same 0.25 hazards a day fall
+        on 306 people and on 49,578 — 298 per 1,000 per year against 1.84."""
+        return self.rate_per_1k_per_year * population / 1000.0 / DAYS_PER_YEAR
 
     @property
     def narratable(self) -> bool:
@@ -42,6 +59,11 @@ class ClassDef:
     @property
     def countable_only(self) -> bool:
         return self.narratability == "numeric"
+
+    @property
+    def measured(self) -> bool:
+        """Is the rate from a source, or is it a number somebody liked?"""
+        return not self.provenance.startswith("estimate")
 
 
 def _seconds(hhmm: str) -> int:
@@ -62,9 +84,17 @@ def load(path: str | Path = DEFAULT_PATH) -> list[ClassDef]:
             raise ValueError(
                 f"{c['type']}: narratability {c['narratability']!r} not in {NARRATABILITY}"
             )
+        if "p_per_day" in c:
+            raise ValueError(
+                f"{c['type']}: p_per_day is gone — hazard rates are per-capita now. "
+                "Give rate_per_1k_per_year (incidents per 1,000 people per year) and "
+                "a provenance saying where it came from."
+            )
+        if float(c["rate_per_1k_per_year"]) <= 0:
+            raise ValueError(f"{c['type']}: rate_per_1k_per_year must be positive")
         w0, w1 = c["window"]
         out.append(ClassDef(
-            type=c["type"], p_per_day=float(c["p_per_day"]),
+            type=c["type"], rate_per_1k_per_year=float(c["rate_per_1k_per_year"]),
             window=(_seconds(w0), _seconds(w1)), shape=c["shape"],
             predicate=c["predicate"], topics=tuple(c["topics"]),
             charge=float(c["charge"]),
