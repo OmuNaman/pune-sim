@@ -316,6 +316,36 @@ def serve(
 
 
 @app.command()
+def ui(
+    port: int = typer.Option(8619),
+    runs_dir: str = typer.Option("runs", help="where run directories live"),
+    dev: bool = typer.Option(False, "--dev", help="allow the Vite dev server on :5173 to call this"),
+) -> None:
+    """Serve the map UI and its API at http://127.0.0.1:<port>.
+
+    Unlike `serve`, this takes no --seed/--households/--block: every run's
+    population is read from its own log's run.meta. Passing the wrong flags to
+    `serve` does not fail, it silently shows a different city, which is the
+    whole reason world/roster.py exists.
+    """
+    import uvicorn
+
+    from punesim import config
+    from punesim.api import create_app
+
+    cfg = config.from_env()
+    application = create_app(
+        runs_root=runs_dir, cfg=cfg if cfg.openrouter_api_key else None, dev=dev,
+    )
+    from punesim.api.app import UI_DIST
+
+    if not UI_DIST.exists():
+        typer.echo(f"(no built UI at {UI_DIST} — API only; run `pnpm dev` in ui/ for the app)")
+    typer.echo(f"Pune Sim -> http://127.0.0.1:{port}   runs: {runs_dir}")
+    uvicorn.run(application, host="127.0.0.1", port=port, log_level="warning")
+
+
+@app.command()
 def compile(
     text: str = typer.Argument(help="free-text scenario, e.g. 'the city DM was killed in broad daylight near Shaniwar Wada on day 2 at noon'"),
     day: int = typer.Option(0, help="default day if the text names none"),

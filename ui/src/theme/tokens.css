@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+/* Peth Paper — a light theme that should read as a hand-surveyed city map
+   rather than a dashboard. The accent is carried over from the old viewer's
+   CSS, where it was already commented "haldi"; the lane colours are the same
+   semantic palette, deepened so they hold their meaning on paper instead of
+   on near-black. */
+
+@theme {
+  --color-paper: #f6f0e1;      /* ground, map land */
+  --color-paper-2: #eee5d0;    /* wash outside the extract, sunken panels */
+  --color-panel: #fbf7ec;      /* floating HUD cards */
+  --color-line: #d9cdb2;       /* hairlines */
+  --color-line-ink: #b9ab8e;   /* strong rules */
+
+  --color-ink: #2b2440;        /* text — indigo, never pure black */
+  --color-ink-dim: #6f6784;
+  --color-ink-faint: #a19a8b;
+
+  --color-haldi: #e8a33d;      /* THE accent */
+  --color-haldi-deep: #b57712; /* haldi as text/icon, for contrast on paper */
+  --color-terracotta: #c65d3b; /* brick */
+
+  /* Event lanes — same meanings the sim has always used */
+  --color-trip: #2563c9;
+  --color-scene: #7c4dc4;
+  --color-mood: #b78708;
+  --color-danger: #c03028;
+  --color-phone: #0e8f80;
+  --color-memory: #c2447e;
+  --color-rumor: #1e8f5a;      /* whisper green */
+
+  /* The four peths, as building tints */
+  --color-peth-kasba: #ebd8c6;
+  --color-peth-shaniwar: #dcdcec;
+  --color-peth-budhwar: #dde7d4;
+  --color-peth-raviwar: #f2e3bf;
+
+  --font-display: "Rozha One", Georgia, serif;
+  --font-body: "Mukta", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Everything below goes in the `components` layer.
+   Tailwind v4 sorts its own layers theme < base < components < utilities, and
+   plain unlayered CSS outranks ALL of them. Leaving `.panel { position:
+   relative }` unlayered therefore beat `class="absolute"` — the top bar and
+   the timeline strip stacked in the document flow and the map collapsed to
+   zero height behind them. Layered, a utility on the element still wins, which
+   is the whole point of writing them there. */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    overflow: hidden;              /* the map owns the viewport */
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+
+/* Numbers that tick must not reflow the layout under them. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* --- panel chrome ------------------------------------------------------- */
+
+/* A ledger card: hard edges, a hairline, and a haldi rule across the top like
+   an account book's column header. No soft shadows, no 16px radii — those are
+   the two tells that make a page look like every other generated dashboard. */
+.panel {
+  background: color-mix(in srgb, var(--color-panel) 94%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--color-line);
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgb(43 36 64 / 0.06), 0 4px 12px rgb(43 36 64 / 0.05);
+  /* The ::before rule needs a containing block. A `position:absolute` utility
+     on the same element still wins, because utilities are a later layer. */
+  position: relative;
+}
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--color-haldi);
+}
+.panel-plain::before { display: none; }
+
+/* Paper grain. One SVG turbulence, on panels only — putting it over the map
+   canvas costs a full-screen composite every frame for a texture nobody can
+   see behind 49,000 moving dots. */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* --- controls ----------------------------------------------------------- */
+
+/* Rubber stamp: press translates and the shadow is hard, never blurred. */
+.stamp {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-ink);
+  border-radius: 2px;
+  background: var(--color-panel);
+  color: var(--color-ink);
+  box-shadow: 2px 2px 0 var(--color-ink);
+  transition: transform 60ms, box-shadow 60ms;
+  cursor: pointer;
+}
+.stamp:hover { background: color-mix(in srgb, var(--color-haldi) 14%, var(--color-panel)); }
+.stamp:active, .stamp[data-on="true"] {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
+.stamp[data-primary="true"] {
+  background: var(--color-haldi);
+  border-color: var(--color-ink);
+}
+.stamp:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: 2px 2px 0 var(--color-line-ink);
+}
+
+/* Lane marks are diamonds, not dots — a rangoli echo, and they read as
+   distinct at 6px in a way circles do not. */
+.diamond {
+  width: 7px; height: 7px;
+  transform: rotate(45deg);
+  display: inline-block;
+  flex: none;
+}
+
+/* Survey-map lettering for district names and section headers. */
+.survey {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Scrollbars that belong to the paper. */
+* { scrollbar-width: thin; scrollbar-color: var(--color-line-ink) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-ink);
+  border-radius: 0;
+}
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Indeterminate progress: the city is being synthesised and we genuinely do
+   not know how far along it is, so the bar must not pretend to a percentage. */
+@keyframes slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* MapLibre's own chrome, made to match. */
+.maplibregl-ctrl-attrib {
+  background: color-mix(in srgb, var(--color-panel) 80%, transparent) !important;
+  font-family: var(--font-body);
+  font-size: 10px;
+}
+.maplibregl-canvas:focus { outline: none; }
+
+}  /* @layer components */

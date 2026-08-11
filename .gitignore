@@ -8,3 +8,9 @@ runs/
 data/anchors/*.pbf
 dist/
 .claude/
+
+# API read caches — pure functions of a log, keyed on its (size, mtime).
+# Deleting one costs a recompute, never correctness.
+runs/**/*.stats.json
+ui/node_modules/
+ui/dist/
